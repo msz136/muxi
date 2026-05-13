@@ -1,0 +1,194 @@
+absl-py==2.4.0
+accelerate==1.8.0
+aiofiles==23.2.1
+aiohappyeyeballs==2.6.1
+aiohttp==3.13.3
+aiosignal==1.4.0
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.12.1
+apex @ file:///mnt/wheel/apex-0.1%2Bmetax3.5.3.9-cp312-cp312-linux_x86_64.whl#sha256=f96a0c3c5b8fd7e09f906943cff47338691d10d25893fc6fbf4a73ad8022c59d
+archspec @ file:///home/conda/feedstock_root/build_artifacts/archspec_1737352602016/work
+attrs==25.4.0
+av==16.1.0
+backports.cached-property==1.0.2
+bitsandbytes @ file:///mnt/wheel/bitsandbytes-0.45.2%2Bmaca3.5.3.15-cp312-cp312-linux_x86_64.whl#sha256=653fd2fb398e341d834fb37222dec879d2da1ea8fd29f7a85f70fdeb8aca473e
+blessings==1.7
+boltons @ file:///home/conda/feedstock_root/build_artifacts/boltons_1733827268945/work
+Brotli @ file:///home/conda/feedstock_root/build_artifacts/brotli-split_1725267488082/work
+cachetools==7.0.1
+causal_conv1d @ file:///mnt/wheel/causal_conv1d-1.5.0.post8%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=c4ccb91e45a5fe7be48994a2d199c6cdccfa566df2d460b94d66cc37f3d2cf52
+certifi @ file:///home/conda/feedstock_root/build_artifacts/certifi_1776866578774/work/certifi
+cffi==2.0.0
+chardet==5.2.0
+charset-normalizer @ file:///home/conda/feedstock_root/build_artifacts/charset-normalizer_1735929714516/work
+click==8.3.1
+codecov==2.1.13
+colorama @ file:///home/conda/feedstock_root/build_artifacts/colorama_1733218098505/work
+coloredlogs==15.0.1
+colour-runner==0.1.1
+conda @ file:///home/conda/feedstock_root/build_artifacts/conda_1736947900115/work
+conda-libmamba-solver @ file:///home/conda/feedstock_root/build_artifacts/conda-libmamba-solver_1727359833193/work/src
+conda-package-handling @ file:///home/conda/feedstock_root/build_artifacts/conda-package-handling_1736345463896/work
+conda_package_streaming @ file:///home/conda/feedstock_root/build_artifacts/conda-package-streaming_1729004031731/work
+contourpy==1.3.3
+coverage==7.13.4
+cryptography==46.0.5
+cycler==0.12.1
+datasets==3.1.0
+deepdiff==8.6.1
+deepspeed @ file:///mnt/wheel/deepspeed-0.16.5%2B9e364b1b.maca3.5.3.15-py3-none-any.whl#sha256=27f27f62e0848bfe8601a49a4584c6a4be89496d1c5157bcbaccd30ea05003ef
+dill==0.3.8
+distlib==0.4.0
+distro @ file:///home/conda/feedstock_root/build_artifacts/distro_1734729835256/work
+docstring_parser==0.17.0
+dropout_layer_norm @ file:///mnt/wheel/dropout_layer_norm-0.1%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=6c80a4521b7f5f0d4ab5fb0c6a0d238ddc0b6d129f7f3ac2ce92dfd00215947e
+einops==0.8.1
+exceptiongroup==1.3.0
+fastapi==0.129.0
+ffmpy==1.0.0
+filelock==3.20.3
+fire==0.7.1
+flash_attn @ file:///mnt/wheel/flash_attn-2.6.3%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=17bef5c954c5e1bf6ce3b91c49b78ce0b7472b171cc8f4362469c62421fcf0eb
+flash_mla @ file:///mnt/wheel/flash_mla-1.0.1%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=8e2a2afe8a9a49a164a6a949e2a6adb45258ab29a4b0db4a9278da0bbb51dede
+flashinfer @ file:///mnt/wheel/flashinfer-0.2.6%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=1c4d43bc164f3f38bf92265939aab813de5f9b2a43d4b481830b8bc2806a7059
+fonttools==4.61.1
+frozendict @ file:///home/conda/feedstock_root/build_artifacts/frozendict_1728841327252/work
+frozenlist==1.8.0
+fsspec==2024.9.0
+ftfy==6.3.1
+fused_dense_lib @ file:///mnt/wheel/fused_dense_lib-2.6.3%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=027d53639d21fca6290a8f508c1c395272c2d9fa139b366d3a3ad9d79e216f05
+google-auth==2.48.0
+google-auth-oauthlib==0.4.6
+gradio==4.44.1
+gradio_client==1.3.0
+grpcio==1.78.0
+h11==0.16.0
+h2 @ file:///home/conda/feedstock_root/build_artifacts/h2_1733298745555/work
+hf-xet==1.2.0
+hjson==3.1.0
+hpack @ file:///home/conda/feedstock_root/build_artifacts/hpack_1733299205993/work
+httpcore==1.0.9
+httpx==0.28.1
+huggingface_hub==0.36.2
+humanfriendly==10.0
+hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_1733298771451/work
+idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1733211830134/work
+importlib_resources==6.5.2
+iniconfig==2.1.0
+Jinja2==3.1.6
+jsonpatch @ file:///home/conda/feedstock_root/build_artifacts/jsonpatch_1733814567314/work
+jsonpointer @ file:///home/conda/feedstock_root/build_artifacts/jsonpointer_1725302935093/work
+kiwisolver==1.4.9
+libmambapy @ file:///home/conda/feedstock_root/build_artifacts/mamba-split_1735835715095/work/libmambapy
+liger_kernel @ file:///mnt/wheel/liger_kernel-0.5.10%2Bmaca3.5.3.15-py3-none-any.whl#sha256=aa60dcb0dff9f500058dbbdd666bdbfcabe02edea0403b2846cc3eacb7097727
+llamafactory @ file:///mnt/wheel/llamafactory-0.9.2%2Bmaca3.5.3.15-py3-none-any.whl#sha256=38bee0b1e2fc94c445b67e9b92118acdd23c624a878108bd8f2067caea10f65a
+mamba @ file:///home/conda/feedstock_root/build_artifacts/mamba-split_1735835715095/work/mamba
+mamba_ssm @ file:///mnt/wheel/mamba_ssm-2.2.4%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=77341f20782fe49d02ce7d378a125879b6006644f2a27773f66ac588fe9e4a54
+Markdown==3.10.2
+markdown-it-py==4.0.0
+MarkupSafe==2.1.5
+matplotlib==3.10.8
+mctlassEx @ file:///mnt/wheel/mctlassEx-0.1.1%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=acbf457c764b92e894fe41bf58ac7a71d0fe62ad513be17a2eb98dee768792e0
+mdurl==0.1.2
+menuinst @ file:///home/conda/feedstock_root/build_artifacts/menuinst_1731146972698/work
+modelscope==1.36.3
+mpmath==1.3.0
+msgpack==1.1.2
+multidict==6.7.1
+multiprocess==0.70.16
+networkx==3.5
+ninja==1.11.1.4
+numpy==1.26.4
+oauthlib==3.3.1
+orderly-set==5.5.0
+orjson==3.11.7
+packaging==26.0
+pandas==2.3.3
+peft==0.17.1
+pillow==10.4.0
+platformdirs==4.6.0
+pluggy==1.6.0
+propcache==0.4.1
+protobuf==3.20.3
+psutil==7.2.2
+py-cpuinfo==9.0.0
+pyarrow==23.0.0
+pyasn1==0.6.2
+pyasn1_modules==0.4.2
+pybind11==3.0.1
+pycosat @ file:///home/conda/feedstock_root/build_artifacts/pycosat_1732588402431/work
+pycparser @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_pycparser_1733195786/work
+pydantic==2.12.5
+pydantic_core==2.41.5
+pydub==0.25.1
+Pygments==2.19.2
+pymxsml @ file:///opt/maca/share/mxsml/pymxsml-2.2.11-py3-none-any.whl#sha256=608fca46a21a356636cee123e1b5cf88ebc6b9246e697a6b15732e884e7c7f04
+pyparsing==3.3.2
+pyproject-api==1.10.0
+PySocks @ file:///home/conda/feedstock_root/build_artifacts/pysocks_1733217236728/work
+pytest==8.4.1
+python-dateutil==2.9.0.post0
+python-multipart==0.0.22
+pytz==2025.2
+PyYAML==6.0.3
+qwen-vl-utils==0.0.14
+regex==2026.1.15
+requests @ file:///home/conda/feedstock_root/build_artifacts/requests_1733217035951/work
+requests-oauthlib==2.0.0
+rich==14.3.2
+rootpath==0.1.1
+rotary_emb @ file:///mnt/wheel/rotary_emb-0.1%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=bdf1e376ba1a08d754ce8c9706759f2f1901eae74f989f503a799d4eaaac13a2
+rsa==4.9.1
+ruamel.yaml @ file:///home/conda/feedstock_root/build_artifacts/ruamel.yaml_1736248036158/work
+ruamel.yaml.clib @ file:///home/conda/feedstock_root/build_artifacts/ruamel.yaml.clib_1728724466132/work
+ruff==0.15.0
+safetensors==0.7.0
+sageattention @ file:///mnt/wheel/sageattention-2.0.1%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=6440859a1c7d12bec127e57c24dae11b4a392164972e3bd669c1c4e9cc0870a3
+scipy==1.16.0
+semantic-version==2.10.0
+sentencepiece==0.2.1
+setuptools==69.5.1
+shellingham==1.5.4
+shtab==1.8.0
+six==1.17.0
+spconv @ file:///mnt/wheel/spconv-2.1.0%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=0c7a4a1c15a5ebbc29232717576e508b044fd846f82ab95095c563a91e06419f
+sse-starlette==3.2.0
+starlette==0.52.1
+sympy==1.14.0
+tensorboard==2.11.0
+tensorboard-data-server==0.6.1
+tensorboard-plugin-wit==1.8.1
+termcolor==3.3.0
+tiktoken==0.12.0
+tokenizers==0.22.1
+tomli==2.2.1
+tomlkit==0.12.0
+torch @ file:///mnt/wheel/torch-2.6.0%2Bmetax3.5.3.9-cp312-cp312-linux_x86_64.whl#sha256=41ce3387801ea5d1f10d5ed035adca94b6937ae24d2c38d43187e7a45438d560
+torchaudio @ file:///mnt/wheel/torchaudio-2.4.1%2Bmetax3.5.3.9-cp312-cp312-linux_x86_64.whl#sha256=1591cd9912364c6236ecbb0432cd831557da2ef46b2c362d923c998c74184d2c
+torchcodec @ file:///mnt/wheel/torchcodec-0.6.0%2Bmetax3.5.3.9-cp312-cp312-linux_x86_64.whl#sha256=ed768274b2e752c8f51e732dd9dbb1ca369a990ae2ceeca85844a5123f26fc30
+torchvision @ file:///mnt/wheel/torchvision-0.15.1%2Bmetax3.5.3.9-cp312-cp312-linux_x86_64.whl#sha256=59653a471d2c758fc6086d2f5cdd5154f682036e6b51fc66fc308543311af976
+tox==4.35.0
+tqdm @ file:///home/conda/feedstock_root/build_artifacts/tqdm_1735661334605/work
+transformers==4.57.1
+triton @ file:///mnt/wheel/triton-3.0.0%2Bmetax3.5.3.9-cp312-cp312-linux_x86_64.whl#sha256=fbdf4ea4127fd65dee44b6355e073c9e29b98dd9433dc7b95c349ea0b9af0424
+trl==0.9.6
+truststore @ file:///home/conda/feedstock_root/build_artifacts/truststore_1729762363021/work
+typer==0.23.0
+typer-slim==0.23.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+tyro==0.8.14
+tzdata==2025.3
+urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1734859416348/work
+uvicorn==0.40.0
+virtualenv==20.36.1
+vllm==0.17.0
+wcwidth==0.6.0
+websockets==12.0
+Werkzeug==3.1.5
+wheel==0.45.1
+xentropy_cuda_lib @ file:///mnt/wheel/xentropy_cuda_lib-0.1%2Bmetax3.5.3.9torch2.6-cp312-cp312-linux_x86_64.whl#sha256=f32fc16d599564d88babb318011c701bb8a2c2f6ffbd0a3afb42aad51c651fe6
+xxhash==3.6.0
+yarl==1.22.0
+zstandard==0.23.0
