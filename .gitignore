@@ -1,0 +1,29 @@
+# Data directories
+dataset/
+ds_test/data/
+ds_test/logs/
+
+# Model files
+models/
+
+# Pip packages
+pkg/
+
+# Point project - data & outputs
+point/data/
+point/data_expert/
+point/data_robopoint_new/
+point/outputs/
+point/logs/
+point/bad/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+
+# Claude config
+.claude/
