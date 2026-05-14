@@ -22,14 +22,14 @@ from pathlib import Path
 # `from trainer_pt_utils import distributed_broadcast_scalars` caching.
 def _patch_maca_nccl():
     import torch
-    def _safe_broadcast_scalars(scalars, num_total_examples=None, use_sum=False):
+    def _safe_broadcast_scalars(scalars, num_total_examples=None, use_sum=False, device=None):
         """No-op replacement: return tensor with scalar values so callers
         that do .sum().item() get a valid result."""
         if isinstance(scalars, (float, int)):
-            return torch.tensor(float(scalars))
+            return torch.tensor(float(scalars), device=device)
         if hasattr(scalars, 'sum'):
             return scalars
-        return torch.tensor([float(s) for s in scalars])
+        return torch.tensor([float(s) for s in scalars], device=device)
 
     from transformers import trainer_pt_utils as _tpu
     _tpu.distributed_broadcast_scalars = _safe_broadcast_scalars
