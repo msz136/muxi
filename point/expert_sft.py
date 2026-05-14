@@ -17,6 +17,27 @@ import sys
 import traceback
 from pathlib import Path
 
+# ── MACA NCCL workaround: disable all_gather at module level ──────────
+# Must happen BEFORE any Trainer import — trainer.py has module-level
+# `from trainer_pt_utils import distributed_broadcast_scalars` caching.
+def _patch_maca_nccl():
+    import torch
+    def _safe_broadcast_scalars(scalars, num_total_examples=None, use_sum=False):
+        """No-op replacement: return tensor with scalar values so callers
+        that do .sum().item() get a valid result."""
+        if isinstance(scalars, (float, int)):
+            return torch.tensor(float(scalars))
+        if hasattr(scalars, 'sum'):
+            return scalars
+        return torch.tensor([float(s) for s in scalars])
+
+    from transformers import trainer_pt_utils as _tpu
+    _tpu.distributed_broadcast_scalars = _safe_broadcast_scalars
+    import transformers.trainer as _tr
+    if hasattr(_tr, 'distributed_broadcast_scalars'):
+        _tr.distributed_broadcast_scalars = _safe_broadcast_scalars
+_patch_maca_nccl()
+
 
 def jdump(x: object) -> str:
     return json.dumps(x, ensure_ascii=False)
@@ -347,8 +368,7 @@ def build_trainer(model, processor, tok, dataset, collator, args):
 
         @staticmethod
         def _patch_dist_ops():
-            """Patch unstable NCCL ops for MACA platform:
-            barrier → all_reduce fallback, all_gather → all_gather fallback."""
+            """Patch unstable NCCL ops for MACA platform."""
             import torch
             import torch.distributed as dist
             if not dist.is_initialized():
