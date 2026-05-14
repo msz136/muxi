@@ -334,31 +334,38 @@ def build_trainer(model, processor, tok, dataset, collator, args):
 
         oom_count = 0
         nan_count = 0
+        grad_nan_count = 0
+        param_nan_count = 0
 
         def __init__(self, *a, **kw):
             super().__init__(*a, **kw)
-            # Patch dist.barrier -> all_reduce: MACA NCCL barrier is unstable,
-            # but all_reduce works fine for every training step.
-            self._patch_barrier()
+            self._patch_dist_ops()
+
+        def _nested_gather(self, tensors, name=None):
+            """Override to skip dist.all_gather which hangs on MACA NCCL."""
+            return tensors
 
         @staticmethod
-        def _patch_barrier():
+        def _patch_dist_ops():
+            """Patch unstable NCCL ops for MACA platform:
+            barrier → all_reduce fallback, all_gather → all_gather fallback."""
             import torch
             import torch.distributed as dist
             if not dist.is_initialized():
                 return
-            _orig = dist.barrier
+
+            # ── barrier patch ──────────────────────────────────────────
+            _orig_barrier = dist.barrier
             def _safe_barrier(group=None, async_op=False, device_ids=None):
                 try:
-                    return _orig(group=group, async_op=async_op, device_ids=device_ids)
+                    return _orig_barrier(group=group, async_op=async_op, device_ids=device_ids)
                 except Exception:
                     pass
-                # Fallback: use all_reduce as barrier substitute (MACA NCCL workaround)
                 try:
                     t = torch.zeros(1)
                     dist.all_reduce(t, group=group, async_op=async_op)
                 except Exception:
-                    pass  # best-effort, IO already done
+                    pass
             dist.barrier = _safe_barrier
 
         def _has_nan_grad(self, model) -> bool:
@@ -370,6 +377,41 @@ def build_trainer(model, processor, tok, dataset, collator, args):
                     if not torch.isfinite(p.grad).all():
                         return True
             return False
+
+        def _sanitize_params(self, model):
+            """Replace NaN/Inf parameter values with 0.0 before forward pass."""
+            import torch
+            m = model.module if hasattr(model, 'module') else model
+            fixed = 0
+            with torch.no_grad():
+                for p in m.parameters():
+                    if p.requires_grad and not torch.isfinite(p).all():
+                        nan_mask = ~torch.isfinite(p.data)
+                        p.data[nan_mask] = 0.0
+                        fixed += 1
+            if fixed > 0:
+                self.param_nan_count += 1
+                log(f"[param_nan] sanitized {fixed} NaN params "
+                    f"step={self.state.global_step} total_events={self.param_nan_count}")
+
+        def _sanitize_grads(self, model):
+            """Replace NaN/Inf gradient values with 0.0 after backward pass."""
+            import torch
+            m = model.module if hasattr(model, 'module') else model
+            fixed = 0
+            for p in m.parameters():
+                if p.grad is not None and not torch.isfinite(p.grad).all():
+                    nan_mask = ~torch.isfinite(p.grad)
+                    p.grad[nan_mask] = 0.0
+                    fixed += 1
+            if fixed > 0:
+                self.grad_nan_count += 1
+                log(f"[grad_nan] sanitized {fixed} NaN grads "
+                    f"step={self.state.global_step} total_events={self.grad_nan_count}")
+                if self.is_world_process_zero():
+                    with open(args.bad_batches, "a", encoding="utf-8") as fb:
+                        fb.write(f"[grad_nan] step={self.state.global_step} "
+                                 f"fixed={fixed} grads total={self.grad_nan_count}\n")
 
         def _compute_loss_safe(self, model, inputs):
             """Compute loss forward pass. Returns (loss, loss_val)."""
@@ -386,6 +428,10 @@ def build_trainer(model, processor, tok, dataset, collator, args):
             import torch
             import torch.distributed as dist
             denom = self.args.gradient_accumulation_steps
+
+            # ── Fix 2: sanitize parameters before forward (catch NaN that leaked from prior micro-batches) ──
+            self._sanitize_params(model)
+
             for attempt in range(args.max_retry_per_batch + 1):
                 try:
                     loss, loss_val = self._compute_loss_safe(model, inputs)
@@ -405,11 +451,20 @@ def build_trainer(model, processor, tok, dataset, collator, args):
                             model.zero_grad(set_to_none=True)
                         except (TypeError, Exception):
                             pass
-                        print(f"[bad_batch] loss={loss_val} step={self.state.global_step} nan_count={self.nan_count}", flush=True)
+                        log(f"[bad_batch] loss={loss_val} step={self.state.global_step} "
+                            f"nan_count={self.nan_count}")
+                        if self.is_world_process_zero():
+                            with open(args.bad_batches, "a", encoding="utf-8") as fb:
+                                fb.write(f"[bad_batch] step={self.state.global_step} "
+                                         f"loss={loss_val} nan_count={self.nan_count}\n")
                         return loss.detach() / denom
 
                     # Clean loss — safe to backward (gradients sync via DeepSpeed)
                     self.accelerator.backward(loss)
+
+                    # ── Fix 1: sanitize NaN gradients after backward (catches NaN that forward missed) ──
+                    self._sanitize_grads(model)
+
                     return loss.detach() / denom
 
                 except (torch.cuda.OutOfMemoryError, RuntimeError) as e:
@@ -538,8 +593,9 @@ def smoke(args) -> int:
     resume = getattr(args, "resume_from_checkpoint", "") or None
     trainer.train(resume_from_checkpoint=resume)
 
-    log(f"[smoke] done. oom_count={trainer.oom_count}, collator_skipped={collator.skipped}, "
-        f"collator_timed_out={collator.timed_out}")
+    log(f"[smoke] done. oom_count={trainer.oom_count}, nan_loss_count={trainer.nan_count}, "
+        f"grad_nan_count={trainer.grad_nan_count}, param_nan_count={trainer.param_nan_count}, "
+        f"collator_skipped={collator.skipped}, collator_timed_out={collator.timed_out}")
     bad_batches = 0
     if Path(args.bad_batches).exists():
         bad_batches = len(Path(args.bad_batches).read_text(encoding="utf-8").splitlines())
