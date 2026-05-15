@@ -3,6 +3,13 @@ dataset/
 ds_test/data/
 ds_test/logs/
 
+#bash
+setclaude.sh
+
+#npm
+node/
+node_current/
+
 # Model files
 models/
 
@@ -30,3 +37,21 @@ venv/
 
 # Claude config
 .claude/
+
+# OPD project generated artifacts
+opd_project/outputs/
+opd_project/logs/
+opd_project/evaluation/results/
+opd_project/evaluation/benchmarks/
+opd_project/data/*.jsonl
+opd_project/data/*stats*.json
+opd_project/data/*report*.md
+opd_project/scripts/__pycache__/
+opd_project/training/__pycache__/
+
+# Local machine/bootstrap artifacts
+network-backups/
+node-current
+set_opencode.sh
+*.bak.*
+point/configs/chosen_batch_size.txt

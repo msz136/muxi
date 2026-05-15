@@ -1,0 +1,130 @@
+# OPD Pointing Expert Training Configuration
+# 基于 slime 框架的 On-Policy Distillation 配置
+
+# === 模型配置 ===
+model:
+  student:
+    name_or_path: "Qwen/Qwen3-VL-8B-Instruct"
+    freeze_vision: true
+    tune_mlp: true
+    tune_llm: true
+    max_pixels: 50176
+    max_model_len: 4096
+    dtype: "bfloat16"
+
+  teacher:
+    # 已训练好的 pointing expert
+    name_or_path: "/data/checkpoints/8b_grounding_multicontract"
+    server_url: "http://localhost:30000/v1/completions"
+    server_engine: "sglang"
+    tensor_parallel: 2
+
+# === OPD 核心参数 ===
+opd:
+  kl_penalty_coeff: 0.05        # β: KL 惩罚系数
+  reward_baseline: 0.0          # 纯蒸馏，无外部奖励
+  advantage_estimator: "grpo"   # 组内相对优势估计
+  group_size: 4                 # 每 prompt 采样数
+  kl_type: "forward"            # KL(student || teacher)
+
+# === 采样参数 ===
+sampling:
+  temperature: 0.7
+  top_p: 0.95
+  max_new_tokens: 256
+  stop_tokens: ["</point>", "<|im_end|>"]
+
+# === 训练参数 ===
+training:
+  learning_rate: 1.0e-6
+  batch_size: 32                # prompts per batch
+  gradient_accumulation_steps: 4
+  total_steps: 2000
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  scheduler: "cosine"
+
+  # 分布式
+  deepspeed_stage: 2
+  gradient_checkpointing: true
+
+# === 数据配置 ===
+data:
+  prompt_pool: "./data/prompt_pool.jsonl"
+
+  # 数据集配比
+  datasets:
+    - name: "robopoint"
+      weight: 0.30
+      path: "/data/share_data/datasets/embodied_jsons/point_xy_format.jsonl"
+      image_root: "/data/share_data/datasets/RoboPoint/images/"
+
+    - name: "refspatial_3d"
+      weight: 0.15
+      path: "/data/share_data/datasets/embodied_jsons/Refspatial_3D_choice_qa_processed.jsonl"
+      image_root: "/data/share_data/datasets/RefSpatial/3D/image"
+
+    - name: "refspatial_sim"
+      weight: 0.10
+      path: "/data/share_data/datasets/embodied_jsons/refspatial_sim_pointing.jsonl"
+      image_root: "/data/share_data/datasets/RefSpatial/sim/image"
+
+    - name: "pixmo_points"
+      weight: 0.15
+      path: "s3://houzhi/qwen_conversion_json/Pixmo/pixmo_points_full_s3_qwen1000.json"
+      image_root: "s3://houzhi/Pixmo"
+
+    - name: "pacolvis"
+      weight: 0.10
+      path: "/data/share_data/datasets/embodied_jsons/paco_lvis_v1_pointing_train_with_system_v2.jsonl"
+      image_root: "/data/luozehang/Qwen3-VL/qwen-vl-finetune/datasets/paco-lvis/images"
+
+    - name: "grasp_anything"
+      weight: 0.10
+      path: "s3://houzhi/qwen_conversion_json/Grasp-Anything/grasp_anything_full_s3_qwen1000.json"
+      image_root: "s3://houzhi/Grasp-Anything"
+
+    - name: "sharerobot_affordance"
+      weight: 0.05
+      path: "/data/share_data/datasets/embodied_jsons/sharerobot_affordance.jsonl"
+      image_root: "/data/share_data/datasets/ShareRobot/images"
+
+    - name: "general_vlm_replay"
+      weight: 0.05
+      path: "/data/share_data/datasets/cambrian_general_qa_subset.jsonl"
+      image_root: "/data/share_data/datasets/cambrian/images"
+
+# === 评估配置 ===
+evaluation:
+  eval_steps: 100               # 轻量评估间隔
+  full_eval_steps: 500          # 完整评估间隔
+  save_steps: 500
+
+  # 评估集
+  benchmarks:
+    - name: "robopoint_test_subset"
+      path: "/data/share_data/datasets/embodied_jsons/robopoint_test_500.jsonl"
+      metrics: ["acc@50", "acc@100", "acc@150", "mean_distance"]
+      frequency: "every_eval"
+
+    - name: "robopoint_test_full"
+      path: "/data/share_data/datasets/embodied_jsons/robopoint_test_full.jsonl"
+      metrics: ["acc@50", "acc@100", "acc@150", "mean_distance"]
+      frequency: "full_eval"
+
+    - name: "viewspatial_bench"
+      path: "/data/benchmarks/ViewSpatial-Bench/test.jsonl"
+      metrics: ["accuracy"]
+      frequency: "full_eval"
+
+    - name: "format_check"
+      path: "./evaluation/format_check_samples.jsonl"
+      metrics: ["format_accuracy"]
+      frequency: "every_eval"
+
+# === 日志 ===
+logging:
+  project: "opd_pointing_expert"
+  wandb: true
+  log_interval: 10

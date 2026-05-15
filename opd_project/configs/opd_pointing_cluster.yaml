@@ -1,0 +1,74 @@
+# OPD Pointing Expert - 集群配置 (MXC500 x8, 64GB HBM2e)
+# 路径适配: /data/msz/
+
+model:
+  student:
+    name_or_path: "/data/msz/models/Qwen3-VL-8B-Instruct"
+    freeze_vision: true
+    tune_mlp: true
+    tune_llm: true
+    max_pixels: 50176
+    max_model_len: 4096
+    dtype: "bfloat16"
+
+  teacher:
+    # Pointing expert (需要先训练或使用已有 grounding checkpoint)
+    # 如果没有独立教师，可先用 SFT 训练一个 pointing expert 作为教师
+    name_or_path: "/data/msz/point/outputs/latest"
+    server_url: "http://localhost:30000/v1/completions"
+    server_engine: "sglang"
+    tensor_parallel: 2
+
+opd:
+  kl_penalty_coeff: 0.05
+  reward_baseline: 0.0
+  advantage_estimator: "grpo"
+  group_size: 4
+  kl_type: "forward"
+
+sampling:
+  temperature: 0.7
+  top_p: 0.95
+  max_new_tokens: 256
+  stop_tokens: ["</point>", "<|im_end|>"]
+
+training:
+  learning_rate: 1.0e-6
+  batch_size: 32
+  gradient_accumulation_steps: 4
+  total_steps: 2000
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  scheduler: "cosine"
+  deepspeed_config: "/data/msz/opd_project/configs/ds_zero2.json"
+  gradient_checkpointing: true
+  num_gpus: 8
+
+data:
+  prompt_pool: "/data/msz/opd_project/data/prompt_pool.jsonl"
+  eval_subset: "/data/msz/opd_project/data/eval_robopoint_500.jsonl"
+  data_root: "/data/msz/dataset"
+
+evaluation:
+  eval_steps: 100
+  full_eval_steps: 500
+  save_steps: 500
+  output_dir: "/data/msz/opd_project/outputs"
+
+  benchmarks:
+    robopoint_test_subset:
+      path: "/data/msz/opd_project/data/eval_robopoint_500.jsonl"
+      metrics: ["acc@50", "acc@100", "acc@150", "mean_distance"]
+
+    viewspatial_bench:
+      path: "/data/msz/opd_project/evaluation/benchmarks/ViewSpatial-Bench"
+      metrics: ["accuracy"]
+
+    refspatial_bench:
+      path: "/data/msz/opd_project/evaluation/benchmarks/RefSpatial-Bench"
+      metrics: ["point_accuracy"]
+
+logging:
+  project: "opd_pointing_expert"
+  log_dir: "/data/msz/opd_project/logs"

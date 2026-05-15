@@ -9,7 +9,7 @@ import transformers
 from torch.utils.data import Dataset
 from transformers import (
     AutoConfig,
-    AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoTokenizer,
     Trainer,
     TrainingArguments,
@@ -247,7 +247,7 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
-    model = AutoModelForCausalLM.from_pretrained(
+    model = AutoModelForImageTextToText.from_pretrained(
         args.model_name_or_path,
         config=config,
         trust_remote_code=True,

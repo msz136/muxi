@@ -10,16 +10,16 @@ export DS_ACCELERATOR=cuda
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-MODEL_PATH="/data/msz/models/qwen3-vl-32b-text-converted"
+MODEL_PATH="/data/msz/models/qwen3-vl-32b"
 DATA_PATH="/data/msz/ds_test/data/smoke_data.jsonl"
 TRAIN_SCRIPT="/data/msz/ds_test/train_sft.py"
 OUTPUT_DIR="/data/msz/ds_test/logs/sft_qwen3_vl_text_converted"
 DS_CONFIG="/data/msz/ds_test/configs/ds_config_sft_smoke_zero3_offload.json"
 
 deepspeed --num_gpus=8 "${TRAIN_SCRIPT}" \
-  --model_name_or_path "${MODEL_PATH}" \
+  --model_name_or_path /data/msz/models/qwen3-vl-32b \
   --data_path "${DATA_PATH}" \
-  --output_dir "${OUTPUT_DIR}" \
+  --output_dir /data/msz/ds_test/logs/sft_qwen3_vl_32b \
   --num_train_epochs 1 \
   --per_device_train_batch_size 1 \
   --gradient_accumulation_steps 1 \
@@ -28,5 +28,6 @@ deepspeed --num_gpus=8 "${TRAIN_SCRIPT}" \
   --logging_steps 1 \
   --save_strategy no \
   --bf16 \
+  --trust_remote_code \
   --deepspeed_config "${DS_CONFIG}" \
   2>&1 | tee "${OUTPUT_DIR}.log"

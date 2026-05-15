@@ -136,6 +136,16 @@ tensors to avoid MACA `all_gather` hangs during logging.
 - Optimizer/scheduler are NOT carried forward (reset each chunk)
 - Epoch counter resets each chunk → no resume issue
 
+## Remote access (Tailscale)
+
+After reboot, restore SSH access with:
+
+```bash
+bash /data/msz/start-tailscale.sh
+```
+
+Full setup doc: `tailscale-setup.md`. Tailscale runs in userspace-networking mode (chroot-compatible, no kernel tun required). State persists in `/var/lib/tailscale/` — auth survives reboots.
+
 ## Git notes
 - `*.log`, `outputs/`, `bad/`, `data_expert/` are gitignored
 - Models and datasets are NOT in git (downloaded by `ds_test/scripts/deploy_datasets_models.sh`)

@@ -1,0 +1,73 @@
+# Multi-teacher OPD smoke/main configuration.
+# Evaluation is intentionally disabled here; use this for data and training sanity.
+
+model:
+  student:
+    name_or_path: "/data/msz/models/8b_base"
+    fallback_name_or_path: "/data/msz/models/Qwen3-VL-8B-Instruct"
+    freeze_vision: true
+    tune_mlp: true
+    tune_llm: true
+    dtype: "bfloat16"
+    max_pixels: 50176
+    max_model_len: 4096
+
+  reference:
+    name_or_path: "/data/msz/models/Qwen3-VL-8B-Instruct"
+    loss_weight: 0.05
+
+  teachers:
+    - name: "expert3"
+      name_or_path: "/data/msz/models/expert3"
+      loss_weight: 0.5
+    - name: "expert4"
+      name_or_path: "/data/msz/models/expert4"
+      loss_weight: 0.5
+
+opd:
+  teacher_loss_mode: "weighted_average"
+  teacher_loss_weights:
+    expert3: 0.5
+    expert4: 0.5
+  reference_kl_coeff: 0.05
+  expert_kl_coeff: 1.0
+  format_reward_coeff: 0.02
+  run_eval: false
+
+batch:
+  prompt_batch_size: 8
+  group_size: 4
+  responses_per_update: 32
+  source_weights:
+    robopoint: 0.85
+    sharerobot_affordance: 0.05
+    general_vqa_replay: 0.10
+
+sampling:
+  temperature: 0.7
+  top_p: 0.95
+  max_new_tokens: 128
+  stop_tokens: ["</point>", "<|im_end|>"]
+
+training:
+  learning_rate: 5.0e-7
+  warmup_ratio: 0.05
+  smoke_steps: 1
+  total_steps: 1000
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  scheduler: "cosine"
+  gradient_accumulation_steps: 4
+  per_device_train_micro_batch_size: 1
+  deepspeed_config: "/data/msz/opd_project/configs/ds_zero2.json"
+  gradient_checkpointing: true
+  bf16: true
+
+data:
+  prompt_pool: "/data/msz/opd_project/data/prompt_pool_clean.jsonl"
+  eval_subset: "/data/msz/opd_project/data/eval_robopoint_500_clean.jsonl"
+  cleaning_stats: "/data/msz/opd_project/data/cleaning_stats.json"
+
+logging:
+  log_dir: "/data/msz/opd_project/logs"
+  report_dir: "/data/msz/opd_project/reports"

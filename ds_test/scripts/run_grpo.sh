@@ -10,7 +10,7 @@ export DS_ACCELERATOR=cuda
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-MODEL_PATH="/data/msz/models/qwen3-vl-32b-text-converted"
+MODEL_PATH="/data/msz/models/qwen3-vl-32b"
 DATA_PATH="/data/msz/ds_test/data/smoke_data.jsonl"
 TRAIN_SCRIPT="/data/msz/ds_test/train_grpo.py"
 OUTPUT_DIR="/data/msz/ds_test/logs/grpo_qwen3_vl_text_converted"
