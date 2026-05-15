@@ -104,6 +104,13 @@ Image paths: absolute or relative to dataset root. Missing images → collator s
 2. `_sanitize_grads()` — checks & zeros NaN grads after each backward
 3. Both log to stdout and `bad/bad_batches.log` with step+count
 4. New counters: `param_nan_count`, `grad_nan_count` reported at smoke/train end
+5. All ranks now synchronize a bad-batch flag before backward. If any rank
+   sees `loss=0`, NaN/Inf loss, or gives up after OOM retries, every rank runs
+   the same zero-loss placeholder backward and the optimizer step is skipped.
+6. `GradGuardCallback` checks DeepSpeed ZeRO's global grad norm immediately
+   before `optimizer.step()`. If bf16 ZeRO-2 reports NaN/Inf grad norm, it
+   clears ZeRO averaged gradients and skips the optimizer step before params or
+   optimizer state can be poisoned.
 
 **Verification**: Test run with `--save-steps 600` (so checkpoint at step 600, well past step 417). Train head metric `param_nan_count` / `grad_nan_count` should remain zero throughout.
 
@@ -119,12 +126,9 @@ NCCL `all_reduce`, `all_gather`, `barrier` are unstable on MACA C500 hardware.
 - `NCCL_P2P_DISABLE=1`, `NCCL_SHM_DISABLE=1`
 - `TORCH_NCCL_BLOCKING_WAIT=1`
 
-**Remaining risk**: `Trainer._maybe_log_save_evaluate` → `distributed_broadcast_scalars` → `dist.all_gather` is NOT yet overridden. If training fails here, add this override to `OomSafeTrainer`:
-```python
-def _maybe_log_save_evaluate(self, tr_loss, *args, **kwargs):
-    self.log({"loss": tr_loss.item() if hasattr(tr_loss, 'item') else tr_loss})
-    return  # skip NCCL-heavy broadcaast
-```
+`distributed_broadcast_scalars` is patched at module import time before
+`Trainer` imports cache it, and `OomSafeTrainer._nested_gather()` returns local
+tensors to avoid MACA `all_gather` hangs during logging.
 
 ### Chunked training caveats
 - Uses `smoke` subcommand (not `train`) because `--smoke-batches` controls per-chunk size

@@ -348,7 +348,7 @@ def load_model_and_processor(args):
 
 
 def build_trainer(model, processor, tok, dataset, collator, args):
-    from transformers import Trainer, TrainingArguments
+    from transformers import Trainer, TrainerCallback, TrainingArguments
 
     class OomSafeTrainer(Trainer):
         """Trainer that catches OOM and NaN gradients, skips bad batches."""
@@ -360,6 +360,10 @@ def build_trainer(model, processor, tok, dataset, collator, args):
 
         def __init__(self, *a, **kw):
             super().__init__(*a, **kw)
+            self.optimizer_skip_count = 0
+            self._skip_next_optimizer_step = False
+            self._skip_next_optimizer_reason = ""
+            self._last_nonfinite_grad_norm = None
             self._patch_dist_ops()
 
         def _nested_gather(self, tensors, name=None):
@@ -387,6 +391,148 @@ def build_trainer(model, processor, tok, dataset, collator, args):
                 except Exception:
                     pass
             dist.barrier = _safe_barrier
+
+        @staticmethod
+        def _scalar_to_float(value):
+            if value is None:
+                return None
+            try:
+                if hasattr(value, "detach"):
+                    value = value.detach()
+                if hasattr(value, "item"):
+                    return float(value.item())
+                return float(value)
+            except Exception:
+                return None
+
+        @classmethod
+        def _is_finite_scalar(cls, value) -> bool:
+            import math
+            v = cls._scalar_to_float(value)
+            return v is not None and math.isfinite(v)
+
+        @staticmethod
+        def _zero_loss_tensor(model):
+            import torch
+            for p in model.parameters():
+                if p.requires_grad:
+                    return p.sum() * 0.0
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            return torch.zeros((), device=device, requires_grad=True)
+
+        def _sync_bad_flag(self, local_bad: bool, device) -> bool:
+            """Return True on every rank if any rank reports a bad batch."""
+            import torch
+            import torch.distributed as dist
+
+            if not dist.is_available() or not dist.is_initialized() or dist.get_world_size() <= 1:
+                return bool(local_bad)
+            try:
+                flag = torch.tensor([1.0 if local_bad else 0.0], device=device)
+                dist.all_reduce(flag, op=dist.ReduceOp.MAX)
+                return bool(flag.item())
+            except Exception:
+                # If MACA NCCL rejects even the scalar sync, keep the local
+                # decision rather than hiding the original training error.
+                return bool(local_bad)
+
+        def _mark_skip_optimizer(self, reason: str) -> None:
+            self._skip_next_optimizer_step = True
+            self._skip_next_optimizer_reason = reason
+
+        def _zero_all_grads(self, model, optimizer=None) -> None:
+            """Clear normal gradients plus DeepSpeed ZeRO averaged gradients."""
+            objects = [model, optimizer, getattr(self, "optimizer", None), getattr(model, "optimizer", None)]
+            for obj in objects:
+                if obj is None or not hasattr(obj, "zero_grad"):
+                    continue
+                try:
+                    obj.zero_grad(set_to_none=True)
+                except TypeError:
+                    obj.zero_grad()
+                except Exception:
+                    pass
+
+            ds_optimizer = getattr(model, "optimizer", None)
+            if ds_optimizer is not None:
+                # DeepSpeed ZeRO-2 bf16 does not run the fp16 overflow path, so
+                # non-finite reduced partitions can sit in averaged_gradients
+                # until step().  Drop them when we have decided to skip.
+                if hasattr(ds_optimizer, "averaged_gradients"):
+                    try:
+                        ds_optimizer.averaged_gradients = {}
+                    except Exception:
+                        pass
+                if hasattr(ds_optimizer, "reset_cpu_buffers"):
+                    try:
+                        ds_optimizer.reset_cpu_buffers()
+                    except Exception:
+                        pass
+
+        def _wrap_optimizer_step(self, optimizer) -> None:
+            if optimizer is None or getattr(optimizer, "_oomsafe_step_wrapped", False):
+                return
+
+            original_step = optimizer.step
+            trainer = self
+
+            def _guarded_step(*step_args, **step_kwargs):
+                if trainer._skip_next_optimizer_step:
+                    reason = trainer._skip_next_optimizer_reason or "bad_grad"
+                    trainer.optimizer_skip_count += 1
+                    trainer._zero_all_grads(trainer.model, optimizer)
+                    trainer._skip_next_optimizer_step = False
+                    trainer._skip_next_optimizer_reason = ""
+                    if trainer.is_world_process_zero():
+                        msg = (f"[optimizer_skip] step={trainer.state.global_step} "
+                               f"reason={reason} total={trainer.optimizer_skip_count}")
+                        log(msg)
+                        with open(args.bad_batches, "a", encoding="utf-8") as fb:
+                            fb.write(msg + "\n")
+                    return None
+                return original_step(*step_args, **step_kwargs)
+
+            optimizer.step = _guarded_step
+            optimizer._oomsafe_step_wrapped = True
+
+        def _guard_pre_optimizer_step(self, model, optimizer=None) -> None:
+            """Skip the update if DeepSpeed reports a non-finite global grad norm."""
+            import torch
+
+            grad_norm = None
+            if hasattr(model, "get_global_grad_norm"):
+                try:
+                    grad_norm = model.get_global_grad_norm()
+                except Exception:
+                    grad_norm = None
+
+            local_bad = grad_norm is not None and not self._is_finite_scalar(grad_norm)
+            if grad_norm is None:
+                local_bad = self._has_nan_grad(model)
+
+            device = None
+            if hasattr(grad_norm, "device"):
+                device = grad_norm.device
+            elif torch.cuda.is_available():
+                device = torch.device("cuda", torch.cuda.current_device())
+            else:
+                device = torch.device("cpu")
+
+            bad_any = self._sync_bad_flag(local_bad, device)
+            if not bad_any:
+                return
+
+            self.grad_nan_count += 1
+            self._last_nonfinite_grad_norm = self._scalar_to_float(grad_norm)
+            self._mark_skip_optimizer("nonfinite_grad_norm")
+            self._zero_all_grads(model, optimizer)
+            if self.is_world_process_zero():
+                msg = (f"[grad_nan] skip optimizer step={self.state.global_step} "
+                       f"grad_norm={self._last_nonfinite_grad_norm} "
+                       f"total_events={self.grad_nan_count}")
+                log(msg)
+                with open(args.bad_batches, "a", encoding="utf-8") as fb:
+                    fb.write(msg + "\n")
 
         def _has_nan_grad(self, model) -> bool:
             import torch
@@ -446,7 +592,6 @@ def build_trainer(model, processor, tok, dataset, collator, args):
 
         def training_step(self, model, inputs, num_items_in_batch=None):
             import torch
-            import torch.distributed as dist
             denom = self.args.gradient_accumulation_steps
 
             # ── Fix 2: sanitize parameters before forward (catch NaN that leaked from prior micro-batches) ──
@@ -456,28 +601,27 @@ def build_trainer(model, processor, tok, dataset, collator, args):
                 try:
                     loss, loss_val = self._compute_loss_safe(model, inputs)
 
-                    # Check for NaN/zero loss BEFORE backward to prevent NaN gradient sync
-                    if loss_val == 0.0 or not bool(torch.isfinite(loss)):
+                    # Check every rank BEFORE backward.  If any rank has a bad
+                    # loss, all ranks run the same zero-loss backward and the
+                    # optimizer step is skipped at the accumulation boundary.
+                    local_bad_loss = loss_val == 0.0 or not bool(torch.isfinite(loss))
+                    bad_loss = self._sync_bad_flag(local_bad_loss, loss.device)
+                    if bad_loss:
                         self.nan_count += 1
-                        # Cross-rank coordination: if ANY rank has NaN, ALL skip backward
-                        if dist.is_initialized() and dist.get_world_size() > 1:
-                            nan_flag = torch.tensor([1.0], device=loss.device)
-                            try:
-                                dist.all_reduce(nan_flag, op=dist.ReduceOp.MAX)
-                            except Exception:
-                                pass
-                        # Zero any accumulated gradients from previous micro-batches
-                        try:
-                            model.zero_grad(set_to_none=True)
-                        except (TypeError, Exception):
-                            pass
-                        log(f"[bad_batch] loss={loss_val} step={self.state.global_step} "
-                            f"nan_count={self.nan_count}")
+                        reason = f"loss={loss_val}" if local_bad_loss else "peer_bad_loss"
+                        self._mark_skip_optimizer(reason)
+                        self._zero_all_grads(model)
+                        z = self._zero_loss_tensor(model)
+                        self.accelerator.backward(z)
+                        self._zero_all_grads(model)
+                        if self.is_world_process_zero():
+                            log(f"[bad_batch] {reason} step={self.state.global_step} "
+                                f"nan_count={self.nan_count}")
                         if self.is_world_process_zero():
                             with open(args.bad_batches, "a", encoding="utf-8") as fb:
                                 fb.write(f"[bad_batch] step={self.state.global_step} "
-                                         f"loss={loss_val} nan_count={self.nan_count}\n")
-                        return loss.detach() / denom
+                                         f"{reason} nan_count={self.nan_count}\n")
+                        return z.detach() / denom
 
                     # Clean loss — safe to backward (gradients sync via DeepSpeed)
                     self.accelerator.backward(loss)
@@ -505,15 +649,40 @@ def build_trainer(model, processor, tok, dataset, collator, args):
                     if self.is_world_process_zero():
                         with open(args.bad_batches, "a", encoding="utf-8") as fb:
                             fb.write(f"oom: {msg}\n")
-                    try:
-                        model.zero_grad(set_to_none=True)
-                    except TypeError:
-                        model.zero_grad()
+                    z = self._zero_loss_tensor(model)
+                    # Participate in the same pre-backward bad-batch sync that
+                    # healthy ranks enter after computing their loss.
+                    self._sync_bad_flag(True, z.device)
+                    self._mark_skip_optimizer("oom")
+                    self._zero_all_grads(model)
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
-                    z = next(p for p in model.parameters() if p.requires_grad).sum() * 0.0
                     self.accelerator.backward(z)
+                    self._zero_all_grads(model)
                     return z.detach()
+
+        def _maybe_log_save_evaluate(self, tr_loss, *a, **kw):
+            if a and (a[0] is None or isinstance(a[0], (int, float)) or hasattr(a[0], "item")):
+                grad_norm = a[0]
+                if grad_norm is not None and not self._is_finite_scalar(grad_norm):
+                    a = (0.0,) + a[1:]
+            return super()._maybe_log_save_evaluate(tr_loss, *a, **kw)
+
+    class GradGuardCallback(TrainerCallback):
+        def __init__(self, owner: OomSafeTrainer):
+            self.owner = owner
+
+        def on_train_begin(self, args_, state, control, **kwargs):
+            optimizer_ = kwargs.get("optimizer") or getattr(self.owner, "optimizer", None)
+            self.owner._wrap_optimizer_step(optimizer_)
+            return control
+
+        def on_pre_optimizer_step(self, args_, state, control, **kwargs):
+            model_ = kwargs.get("model") or self.owner.model
+            optimizer_ = kwargs.get("optimizer") or getattr(self.owner, "optimizer", None)
+            self.owner._wrap_optimizer_step(optimizer_)
+            self.owner._guard_pre_optimizer_step(model_, optimizer_)
+            return control
 
     targs = TrainingArguments(
         output_dir=args.output_dir,
@@ -542,6 +711,7 @@ def build_trainer(model, processor, tok, dataset, collator, args):
         model=model, args=targs, train_dataset=dataset,
         data_collator=collator, processing_class=processor,
     )
+    trainer.add_callback(GradGuardCallback(trainer))
     return trainer
 
 
@@ -615,6 +785,7 @@ def smoke(args) -> int:
 
     log(f"[smoke] done. oom_count={trainer.oom_count}, nan_loss_count={trainer.nan_count}, "
         f"grad_nan_count={trainer.grad_nan_count}, param_nan_count={trainer.param_nan_count}, "
+        f"optimizer_skip_count={trainer.optimizer_skip_count}, "
         f"collator_skipped={collator.skipped}, collator_timed_out={collator.timed_out}")
     bad_batches = 0
     if Path(args.bad_batches).exists():
@@ -648,6 +819,10 @@ def train(args) -> None:
     collator = SafeCollator(processor, tok, args.bad_samples, args)
     trainer = build_trainer(model, processor, tok, ds, collator, args)
     trainer.train()
+    log(f"[train] done. oom_count={trainer.oom_count}, nan_loss_count={trainer.nan_count}, "
+        f"grad_nan_count={trainer.grad_nan_count}, param_nan_count={trainer.param_nan_count}, "
+        f"optimizer_skip_count={trainer.optimizer_skip_count}, "
+        f"collator_skipped={collator.skipped}, collator_timed_out={collator.timed_out}")
     trainer.save_model(args.output_dir)
     processor.save_pretrained(args.output_dir)
 
