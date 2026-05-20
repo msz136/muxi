@@ -1,0 +1,13 @@
+{
+  "model": "/data/msz/models/Qwen3-VL-8B-Instruct",
+  "data": "/data/msz/opd_project/data/semantic_nav_region_box_v1/eval/semantic_nav_region_solution_a_bidir_eval_v1.jsonl",
+  "num_samples": 144,
+  "format_ok": 63,
+  "format_rate": 0.4375,
+  "mean_iou": 0.11567825170990306,
+  "iou_at_0_3": 0.07936507936507936,
+  "iou_at_0_5": 0.0,
+  "mean_center_error": 143.65922101773822,
+  "mean_coord_mae": 109.26190476190476,
+  "results_path": "/data/msz/point/outputs/region_expertsft_solution_a_bidir_final_20260519_171308/eval_region_base_144.jsonl"
+}

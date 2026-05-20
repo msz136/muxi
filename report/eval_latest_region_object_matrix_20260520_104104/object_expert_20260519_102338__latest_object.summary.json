@@ -1,0 +1,13 @@
+{
+  "model": "/data/msz/point/outputs/expertsft_semantic_nav_final_20260519_102338",
+  "data": "/data/msz/opd_project/data/semantic_nav_box_v1/eval/semantic_nav_box_heldout_object_ref_eval_v1.jsonl",
+  "num_samples": 1251,
+  "format_ok": 1251,
+  "format_rate": 1.0,
+  "mean_iou": 0.39828348812639874,
+  "iou_at_0_3": 0.5475619504396483,
+  "iou_at_0_5": 0.4748201438848921,
+  "mean_center_error": 110.71990808149194,
+  "mean_coord_mae": 71.96143085531575,
+  "results_path": "/data/msz/point/outputs/eval_latest_region_object_matrix_20260520_104104/object_expert_20260519_102338__latest_object.jsonl"
+}

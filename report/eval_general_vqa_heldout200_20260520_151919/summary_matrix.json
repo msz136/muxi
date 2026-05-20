@@ -1,0 +1,42 @@
+[
+  {
+    "model_name": "base",
+    "rc": "0",
+    "num_samples": 200,
+    "normalized_exact": 0.0,
+    "relaxed_match": 0.295,
+    "mean_token_f1": 0.0,
+    "option_samples": 200,
+    "results_path": "/data/msz/point/outputs/eval_general_vqa_heldout200_20260520_151919/base__general_heldout200.jsonl"
+  },
+  {
+    "model_name": "obj_expert",
+    "rc": "0",
+    "num_samples": 200,
+    "normalized_exact": 0.045,
+    "relaxed_match": 0.245,
+    "mean_token_f1": 0.07166666666666666,
+    "option_samples": 200,
+    "results_path": "/data/msz/point/outputs/eval_general_vqa_heldout200_20260520_151919/obj_expert__general_heldout200.jsonl"
+  },
+  {
+    "model_name": "reg_expert",
+    "rc": "0",
+    "num_samples": 200,
+    "normalized_exact": 0.065,
+    "relaxed_match": 0.31,
+    "mean_token_f1": 0.1590909090909091,
+    "option_samples": 200,
+    "results_path": "/data/msz/point/outputs/eval_general_vqa_heldout200_20260520_151919/reg_expert__general_heldout200.jsonl"
+  },
+  {
+    "model_name": "opd_v1",
+    "rc": "0",
+    "num_samples": 200,
+    "normalized_exact": 0.055,
+    "relaxed_match": 0.295,
+    "mean_token_f1": 0.135,
+    "option_samples": 200,
+    "results_path": "/data/msz/point/outputs/eval_general_vqa_heldout200_20260520_151919/opd_v1__general_heldout200.jsonl"
+  }
+]

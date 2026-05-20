@@ -161,3 +161,4 @@ base model's general behavior:
 - average predicted point count is not wildly lower than the ground-truth count.
 - general VQA replay does not show obvious collapse or formatting leakage.
 - training logs show no persistent NaN/Inf loss, grad norm, or parameter issues.
+

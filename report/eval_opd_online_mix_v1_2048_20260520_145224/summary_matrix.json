@@ -1,0 +1,34 @@
+[
+  {
+    "model_name": "opd_online_mix_v1_2048",
+    "split": "latest_object",
+    "num_samples": 1251,
+    "format_ok": 1251,
+    "format_rate": 1.0,
+    "mean_iou_parseable": 0.17318695445622467,
+    "mean_iou_all": 0.17318695445622467,
+    "iou_at_0_3_parseable": 0.2270183852917666,
+    "iou_at_0_3_all": 0.2270183852917666,
+    "iou_at_0_5_parseable": 0.15267785771382894,
+    "iou_at_0_5_all": 0.15267785771382894,
+    "mean_center_error": 197.35818839546425,
+    "mean_coord_mae": 137.53277378097522,
+    "results_path": "/data/msz/point/outputs/eval_opd_online_mix_v1_2048_20260520_145224/opd_online_mix_v1_2048__latest_object.jsonl"
+  },
+  {
+    "model_name": "opd_online_mix_v1_2048",
+    "split": "latest_region",
+    "num_samples": 144,
+    "format_ok": 144,
+    "format_rate": 1.0,
+    "mean_iou_parseable": 0.14512059074097283,
+    "mean_iou_all": 0.14512059074097283,
+    "iou_at_0_3_parseable": 0.20833333333333334,
+    "iou_at_0_3_all": 0.20833333333333334,
+    "iou_at_0_5_parseable": 0.09027777777777778,
+    "iou_at_0_5_all": 0.09027777777777778,
+    "mean_center_error": 137.6453070855265,
+    "mean_coord_mae": 92.49305555555556,
+    "results_path": "/data/msz/point/outputs/eval_opd_online_mix_v1_2048_20260520_145224/opd_online_mix_v1_2048__latest_region.jsonl"
+  }
+]

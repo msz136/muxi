@@ -1,0 +1,13 @@
+{
+  "out_root": "/data/msz/point/outputs/eval_latest_region_object_matrix_20260520_104104",
+  "seed": 20260520,
+  "max_new_tokens": 64,
+  "region_eval": "/data/msz/opd_project/data/semantic_nav_goal_eval_v1/semantic_nav_goal_reg_eval_v1.jsonl",
+  "object_eval": "/data/msz/opd_project/data/semantic_nav_box_v1/eval/semantic_nav_box_heldout_object_ref_eval_v1.jsonl",
+  "models": {
+    "base": "/data/msz/models/Qwen3-VL-8B-Instruct",
+    "object_expert_20260519_102338": "/data/msz/point/outputs/expertsft_semantic_nav_final_20260519_102338",
+    "region_solution_a_20260519_171308": "/data/msz/point/outputs/region_expertsft_solution_a_bidir_final_20260519_171308",
+    "region_predbox_v1_20260519_191043": "/data/msz/point/outputs/region_expertsft_predbox_label_v1_final_20260519_191043"
+  }
+}

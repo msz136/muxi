@@ -42,7 +42,7 @@ date
 
 wc -l "${DATA_OUT}"
 
-deepspeed --num_gpus="${NUM_GPUS:-8}" "${POINT_ROOT}/expert_sft.py" smoke \
+/opt/conda/bin/deepspeed --num_gpus="${NUM_GPUS:-8}" "${POINT_ROOT}/expert_sft.py" smoke \
   --model-name-or-path /data/msz/models/8b_base \
   --data-path "${DATA_OUT}" \
   --output-dir "${OUT_DIR}" \

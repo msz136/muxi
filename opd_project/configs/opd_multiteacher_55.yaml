@@ -71,3 +71,4 @@ data:
 logging:
   log_dir: "/data/msz/opd_project/logs"
   report_dir: "/data/msz/opd_project/reports"
+

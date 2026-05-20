@@ -1,0 +1,22 @@
+{
+  "num_samples": 1251,
+  "strict_ok": 440,
+  "strict_rate": 0.3517186250999201,
+  "lenient_ok": 1251,
+  "lenient_rate": 1.0,
+  "parse_modes": {
+    "strict": 440,
+    "flat": 811,
+    "fail": 0
+  },
+  "mean_iou_parseable": 0.12727641845409593,
+  "mean_iou_all": 0.12727641845409593,
+  "median_iou_parseable": 0.06397199490913553,
+  "iou_at_0_3_parseable": 0.12470023980815348,
+  "iou_at_0_3_all": 0.12470023980815348,
+  "iou_at_0_5_parseable": 0.055955235811350916,
+  "iou_at_0_5_all": 0.055955235811350916,
+  "mean_center_error": 198.89811314613374,
+  "mean_coord_mae": 168.18585131894486,
+  "split": "latest_object"
+}

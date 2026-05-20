@@ -1,0 +1,13 @@
+{
+  "model": "/data/msz/point/outputs/opd_online_mix_v1_2048_final_20260520_142529",
+  "data": "/data/msz/opd_project/data/semantic_nav_goal_eval_v1/semantic_nav_goal_reg_eval_v1.jsonl",
+  "num_samples": 144,
+  "format_ok": 144,
+  "format_rate": 1.0,
+  "mean_iou": 0.14512059074097283,
+  "iou_at_0_3": 0.20833333333333334,
+  "iou_at_0_5": 0.09027777777777778,
+  "mean_center_error": 137.6453070855265,
+  "mean_coord_mae": 92.49305555555556,
+  "results_path": "/data/msz/point/outputs/eval_opd_online_mix_v1_2048_20260520_145224/opd_online_mix_v1_2048__latest_region.jsonl"
+}

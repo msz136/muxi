@@ -3,18 +3,17 @@ dataset/
 ds_test/data/
 ds_test/logs/
 
-#bash
+# Shell/editor bootstrap
 setclaude.sh
-
-#npm
-node/
-node_current/
 
 # Model files
 models/
 
 # Pip packages
 pkg/
+_remote_deps/
+_opentrackvla_deps/
+.tmp_xvfb_libs/
 
 # Point project - data & outputs
 point/data/
@@ -23,6 +22,8 @@ point/data_robopoint_new/
 point/outputs/
 point/logs/
 point/bad/
+point/eval_case_vis/
+point/*.png
 
 # Python cache
 __pycache__/
@@ -44,14 +45,34 @@ opd_project/logs/
 opd_project/evaluation/results/
 opd_project/evaluation/benchmarks/
 opd_project/data/*.jsonl
-opd_project/data/*stats*.json
-opd_project/data/*report*.md
 opd_project/scripts/__pycache__/
 opd_project/training/__pycache__/
 
+# Local experiment mirrors and generated demos
+embodied/
+opd_box_demo10/
+opd_project_returned_duplicate_from_pryer_*/
+opd_semantic_nav_*/
+
 # Local machine/bootstrap artifacts
 network-backups/
+node/
+node_current/
 node-current
 set_opencode.sh
 *.bak.*
 point/configs/chosen_batch_size.txt
+
+# Reports: keep summary JSON/Markdown, ignore raw artifacts.
+report/**/*
+!report/**/
+!report/**/*.md
+!report/**/*.json
+report/**/*.jsonl
+report/**/*.log
+report/**/*.rc
+report/**/*.status
+report/**/*.tsv
+report/**/*.png
+report/**/*.html
+report/**/*.svg

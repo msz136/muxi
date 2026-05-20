@@ -1,0 +1,13 @@
+{
+  "model": "/data/msz/point/outputs/region_expertsft_solution_a_bidir_final_20260519_171308",
+  "data": "/data/msz/opd_project/data/semantic_nav_region_box_v1/eval/semantic_nav_region_solution_a_bidir_eval_v1.jsonl",
+  "num_samples": 144,
+  "format_ok": 144,
+  "format_rate": 1.0,
+  "mean_iou": 0.23706857662844275,
+  "iou_at_0_3": 0.3402777777777778,
+  "iou_at_0_5": 0.18055555555555555,
+  "mean_center_error": 84.18877434546411,
+  "mean_coord_mae": 54.34027777777778,
+  "results_path": "/data/msz/point/outputs/region_expertsft_solution_a_bidir_final_20260519_171308/eval_region_expert_144.jsonl"
+}

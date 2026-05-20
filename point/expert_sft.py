@@ -1,904 +1,452 @@
 #!/usr/bin/env python3
-"""Expert SFT training for Qwen3-VL-8B-Instruct with multi-dataset grounding + VQA data.
-
-Features:
-- Per-batch OOM handling: skips bad batches instead of crashing
-- Batch timeout: skips batches that take too long (hung I/O)
-- Auto batch-size probing: falls back 8 -> 6 -> 4 -> 2 -> 1
-- Smoke mode: runs first N batches to validate config
-"""
+"""Final-only expert SFT for Qwen3-VL semantic navigation box grounding."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
-import sys
-import traceback
 from pathlib import Path
+from typing import Any
 
-# ── MACA NCCL workaround: disable all_gather at module level ──────────
-# Must happen BEFORE any Trainer import — trainer.py has module-level
-# `from trainer_pt_utils import distributed_broadcast_scalars` caching.
-def _patch_maca_nccl():
-    import torch
-    def _safe_broadcast_scalars(scalars, num_total_examples=None, use_sum=False, device=None):
-        """No-op replacement: return tensor with scalar values so callers
-        that do .sum().item() get a valid result."""
-        if isinstance(scalars, (float, int)):
-            return torch.tensor(float(scalars), device=device)
-        if hasattr(scalars, 'sum'):
-            return scalars
-        return torch.tensor([float(s) for s in scalars], device=device)
+import torch
+import transformers
+from torch.utils.data import Dataset
+from transformers import AutoConfig, AutoProcessor, Trainer, TrainerCallback, TrainingArguments, set_seed
 
-    from transformers import trainer_pt_utils as _tpu
-    _tpu.distributed_broadcast_scalars = _safe_broadcast_scalars
-    import transformers.trainer as _tr
-    if hasattr(_tr, 'distributed_broadcast_scalars'):
-        _tr.distributed_broadcast_scalars = _safe_broadcast_scalars
-_patch_maca_nccl()
+try:
+    from transformers.integrations import HfDeepSpeedConfig
+except Exception:  # pragma: no cover - depends on installed transformers build
+    HfDeepSpeedConfig = None
 
 
-def jdump(x: object) -> str:
-    return json.dumps(x, ensure_ascii=False)
+DEFAULT_SYSTEM_PROMPT = (
+    "You are a semantic navigation grounding assistant. Given an image and target "
+    "object information, return the target object's bounding box in coordinates "
+    "from 0 to 1000. Return only <box>[[x1,y1],[x2,y2]]</box>."
+)
+
+
+def is_rank0() -> bool:
+    return int(os.environ.get("RANK", "0")) == 0
 
 
 def log(msg: str) -> None:
-    print(msg, flush=True)
+    if is_rank0():
+        print(msg, flush=True)
 
 
-# ── constants ──────────────────────────────────────────────────────────
-
-SYSTEM_PROMPT = (
-    "You are a helpful vision-language assistant. "
-    "When the user asks for a location, answer with coordinates "
-    "in the range 0 to 1000."
-)
-
-# ── dataset ────────────────────────────────────────────────────────────
-
-
-class JsonlDataset:
-    def __init__(self, path: Path | str):
-        self.rows: list[dict] = []
-        with open(path, encoding="utf-8") as f:
+class JsonlConversationDataset(Dataset):
+    def __init__(self, path: str | Path, limit_samples: int | None = None):
+        self.path = str(path)
+        self.rows: list[dict[str, Any]] = []
+        with open(path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
-                try:
-                    self.rows.append(json.loads(line))
-                except Exception:
-                    pass
+                self.rows.append(json.loads(line))
+                if limit_samples and len(self.rows) >= limit_samples:
+                    break
         if not self.rows:
-            raise SystemExit(f"no usable samples in {path}")
+            raise ValueError(f"no usable JSONL rows found in {path}")
 
     def __len__(self) -> int:
         return len(self.rows)
 
-    def __getitem__(self, i: int) -> dict:
-        return self.rows[i]
+    def __getitem__(self, idx: int) -> dict[str, Any]:
+        return self.rows[idx]
 
 
-# ── collator ───────────────────────────────────────────────────────────
+class VisionConversationCollator:
+    def __init__(self, processor: Any, args: argparse.Namespace):
+        from qwen_vl_utils import process_vision_info
 
-
-class SafeCollator:
-    """OOM-safe collator: processes full batch through processor at once for correct vision padding."""
-
-    def __init__(self, processor, tok, bad_samples_path: str, args):
         self.processor = processor
-        self.tok = tok
+        self.tokenizer = getattr(processor, "tokenizer", processor)
         self.args = args
-        self.bad_path = bad_samples_path
-        self.bad = open(bad_samples_path, "a", encoding="utf-8")
-        self.skipped = 0
-        self.timed_out = 0
-        self.batch_timeout = int(getattr(args, "batch_timeout", 0) or 0)
+        self.process_vision_info = process_vision_info
+        self.empty_label_fixes = 0
 
-    def _build_messages(self, ex: dict, with_answer: bool) -> dict | None:
-        try:
-            cs = ex["conversations"]
-            sys_val = cs[0]["value"]
-            usr = cs[1]["value"]
-            ans = cs[2]["value"] if len(cs) > 2 else ""
-        except (KeyError, IndexError):
-            return None
-        content: list[dict] = []
-        for p in ex.get("image", []):
-            content.append({"type": "image", "image": p})
-        for p in ex.get("video", []):
-            content.append({
-                "type": "video", "video": p,
-                "max_pixels": self.args.max_pixels,
-                "min_pixels": self.args.min_pixels,
-                "max_frames": self.args.video_max_frames,
-                "min_frames": self.args.video_min_frames,
-                "fps": 1.0,
-            })
-        content.append({"type": "text", "text": usr.replace("<image>", "").replace("<video>", "").strip()})
-        msgs = [
-            {"role": "system", "content": sys_val},
-            {"role": "user", "content": content},
+    def _extract_turns(self, example: dict[str, Any]) -> tuple[str, str, str]:
+        system_text = DEFAULT_SYSTEM_PROMPT
+        user_text = ""
+        answer_text = ""
+        for turn in example.get("conversations", []):
+            role = str(turn.get("from", "")).lower()
+            value = str(turn.get("value", ""))
+            if role == "system":
+                system_text = value or system_text
+            elif role in {"human", "user"} and not user_text:
+                user_text = value
+            elif role in {"gpt", "assistant"} and not answer_text:
+                answer_text = value
+        if not user_text:
+            raise ValueError("sample has no user turn")
+        if not answer_text:
+            raise ValueError("sample has no assistant answer")
+        return system_text, user_text, answer_text
+
+    def _content_from_sample(self, example: dict[str, Any], user_text: str) -> list[dict[str, Any]]:
+        content: list[dict[str, Any]] = []
+        for image_path in example.get("image") or []:
+            content.append(
+                {
+                    "type": "image",
+                    "image": str(image_path),
+                    "min_pixels": self.args.min_pixels,
+                    "max_pixels": self.args.max_pixels,
+                }
+            )
+        for video_path in example.get("video") or []:
+            content.append(
+                {
+                    "type": "video",
+                    "video": str(video_path),
+                    "min_pixels": self.args.min_pixels,
+                    "max_pixels": self.args.max_pixels,
+                    "min_frames": self.args.video_min_frames,
+                    "max_frames": self.args.video_max_frames,
+                    "fps": 1.0,
+                }
+            )
+        text = user_text.replace("<image>", "").replace("<video>", "").strip()
+        if text:
+            content.append({"type": "text", "text": text})
+        return content
+
+    def _messages(self, example: dict[str, Any], include_answer: bool) -> list[dict[str, Any]]:
+        system_text, user_text, answer_text = self._extract_turns(example)
+        messages = [
+            {"role": "system", "content": system_text},
+            {"role": "user", "content": self._content_from_sample(example, user_text)},
         ]
-        if with_answer:
-            msgs.append({"role": "assistant", "content": ans})
-        return msgs
+        if include_answer:
+            messages.append({"role": "assistant", "content": answer_text})
+        return messages
 
-    def _try_load_images(self, messages: dict) -> list | None:
-        """Try to load all images for a sample. Returns list of PIL Images,
-        or None if any image failed to load (sample should be skipped)."""
-        import concurrent.futures
-        def _load():
-            try:
-                from qwen_vl_utils import process_vision_info
-                imgs, _vids = process_vision_info([messages])
-                if imgs:
-                    return list(imgs)
-            except Exception:
-                pass
-            # Fallback: manual loading, return None if any fail
-            from PIL import Image
-            import requests as _req
-            from io import BytesIO
-            result = []
-            for c in messages[1].get("content", []):
-                val = c.get("image") if isinstance(c, dict) else None
-                if not isinstance(val, str):
-                    continue
-                try:
-                    if val.startswith("http://") or val.startswith("https://"):
-                        resp = _req.get(val, timeout=2)
-                        resp.raise_for_status()
-                        result.append(Image.open(BytesIO(resp.content)).convert("RGB"))
-                    else:
-                        if not Path(val).exists() and not val.startswith("/"):
-                            # RoboPoint relative paths → resolve against images dir
-                            val = f"/data/msz/dataset/RoboPoint/images/{val}"
-                        if Path(val).exists():
-                            img = Image.open(val).convert("RGB")
-                            # Check for NaN/Inf pixels (corrupted images)
-                            import numpy as np
-                            arr = np.array(img, dtype=np.float32)
-                            if np.any(~np.isfinite(arr)):
-                                return None  # corrupted image
-                            result.append(img)
-                        else:
-                            return None  # local file not found
-                except Exception:
-                    return None  # download or load failed
-            return result
+    def __call__(self, batch: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
+        full_messages = [self._messages(example, include_answer=True) for example in batch]
+        prompt_messages = [self._messages(example, include_answer=False) for example in batch]
 
-        ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        try:
-            return ex.submit(_load).result(timeout=15)
-        except (concurrent.futures.TimeoutError, Exception):
-            return None
-        finally:
-            ex.shutdown(wait=False)
+        texts_full = [
+            self.processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=False)
+            for msg in full_messages
+        ]
+        texts_prompt = [
+            self.processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
+            for msg in prompt_messages
+        ]
 
-    def _dummy_batch(self, n_skipped: int = 1) -> dict:
-        """Minimal batch with one valid token — produces finite loss/gradients."""
-        dummy = [[{"role": "user", "content": [{"type": "text", "text": "skip"}]},
-                   {"role": "assistant", "content": [{"type": "text", "text": "skip"}]}]]
-        dummy_texts = [self.processor.apply_chat_template(m, tokenize=False, add_generation_prompt=False) for m in dummy]
-        enc = self.processor(text=dummy_texts, images=None, videos=None,
-                             padding=True, truncation=True, max_length=64, return_tensors="pt")
-        labels = enc["input_ids"].clone()
-        labels[:] = -100
-        # Keep ONE token valid (first non-pad after prompt) to get finite loss
-        pad_id = getattr(self.tok, "pad_token_id", 0) or 0
-        for i in range(labels.shape[0]):
-            row = enc["input_ids"][i]
-            valid_mask = row != pad_id
-            valid_mask[:2] = False  # skip BOS + first tokens (prompt)
-            idx = valid_mask.nonzero(as_tuple=True)[0]
-            if len(idx) > 0:
-                labels[i, idx[0].item()] = row[idx[0].item()]
-        out = dict(enc)
-        out["labels"] = labels
-        self.skipped += n_skipped
-        return out
-
-    def _collate_impl(self, batch: list[dict]) -> dict:
-        """Core collation: build messages, load images, tokenize."""
-        import torch
-
-        all_imgs_flat = []
-        full_msgs, prompt_msgs = [], []
-
-        for ex in batch:
-            try:
-                mf = self._build_messages(ex, True)
-                mp = self._build_messages(ex, False)
-                if mf is None or mp is None:
-                    continue
-                img_slots = [c for c in mf[1].get("content", [])
-                            if isinstance(c, dict) and c.get("type") == "image"]
-                if img_slots:
-                    loaded = self._try_load_images(mf)
-                    if loaded is None or len(loaded) != len(img_slots):
-                        self.skipped += 1
-                        continue
-                    all_imgs_flat.extend(loaded)
-                full_msgs.append(mf)
-                prompt_msgs.append(mp)
-            except Exception as e:
-                self.skipped += 1
-                self.bad.write(jdump({"err": repr(e), "sample": ex}) + "\n")
-                self.bad.flush()
-
-        if not full_msgs:
-            return self._dummy_batch(len(batch))
-
-        texts_full = [self.processor.apply_chat_template(m, tokenize=False, add_generation_prompt=False) for m in full_msgs]
-        texts_prompt = [self.processor.apply_chat_template(m, tokenize=False, add_generation_prompt=True) for m in prompt_msgs]
+        image_inputs, video_inputs = self.process_vision_info(full_messages)
+        image_inputs = image_inputs if image_inputs else None
+        video_inputs = video_inputs if video_inputs else None
 
         enc = self.processor(
-            text=texts_full, images=all_imgs_flat or None, videos=None,
-            padding=True, truncation=True,
-            max_length=self.args.model_max_length, return_tensors="pt",
+            text=texts_full,
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            truncation=True,
+            max_length=self.args.model_max_length,
+            return_tensors="pt",
         )
-        # Check for NaN/Inf in image tensors (corrupted images / bad transforms → skip batch)
-        import torch
-        pv = enc.get("pixel_values")
-        if pv is not None and not torch.isfinite(pv).all():
-            return self._dummy_batch(len(batch))
-        # Check image_grid_thw for zero dimensions (can cause division by zero in vision encoder)
-        igt = enc.get("image_grid_thw")
-        if pv is not None and igt is not None and (igt <= 0).any():
-            return self._dummy_batch(len(batch))
-
-        encp = self.processor(
-            text=texts_prompt, images=all_imgs_flat or None, videos=None,
-            padding=True, truncation=True,
-            max_length=self.args.model_max_length, return_tensors="pt",
+        prompt_enc = self.processor(
+            text=texts_prompt,
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            truncation=True,
+            max_length=self.args.model_max_length,
+            return_tensors="pt",
         )
 
-        prompt_lens = encp["attention_mask"].sum(dim=1)
         labels = enc["input_ids"].clone()
-        B = labels.shape[0]
-        for i in range(B):
-            pl = int(prompt_lens[i].item())
-            labels[i, :pl] = -100
-            pad_mask = enc["attention_mask"][i] == 0
-            labels[i, pad_mask] = -100
+        prompt_lens = prompt_enc["attention_mask"].sum(dim=1)
+        attention_mask = enc["attention_mask"]
+        for row_idx in range(labels.shape[0]):
+            prompt_len = min(int(prompt_lens[row_idx].item()), labels.shape[1])
+            labels[row_idx, :prompt_len] = -100
+            labels[row_idx, attention_mask[row_idx] == 0] = -100
+            if not torch.any(labels[row_idx] != -100):
+                valid_positions = torch.nonzero(attention_mask[row_idx], as_tuple=False).flatten()
+                if len(valid_positions) == 0:
+                    raise ValueError("sample produced no valid tokens")
+                pos = int(valid_positions[-1].item())
+                labels[row_idx, pos] = enc["input_ids"][row_idx, pos]
+                self.empty_label_fixes += 1
 
-        out = dict(enc)
-        out["labels"] = labels
-        return out
+        for key, value in enc.items():
+            if torch.is_tensor(value) and value.is_floating_point() and not torch.isfinite(value).all():
+                raise FloatingPointError(f"non-finite tensor produced by processor: {key}")
 
-    def __call__(self, batch: list[dict]) -> dict:
-        if not self.batch_timeout:
-            return self._collate_impl(batch)
-        import concurrent.futures
-        ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        try:
-            return ex.submit(self._collate_impl, batch).result(timeout=self.batch_timeout)
-        except concurrent.futures.TimeoutError:
-            self.timed_out += 1
-            log(f"[collator] batch timed out after {self.batch_timeout}s "
-                f"(total_timeouts={self.timed_out}, skipped={self.skipped})")
-            return self._dummy_batch(len(batch))
-        finally:
-            ex.shutdown(wait=False)
-
-    def close(self) -> None:
-        self.bad.close()
+        enc["labels"] = labels
+        return dict(enc)
 
 
-# ── model loader ──────────────────────────────────────────────────────
+class AbortOnNonFiniteLog(TrainerCallback):
+    def on_log(self, args, state, control, logs=None, **kwargs):  # type: ignore[override]
+        for key in ("loss", "grad_norm", "learning_rate"):
+            if not logs or key not in logs:
+                continue
+            value = logs[key]
+            try:
+                finite = math.isfinite(float(value))
+            except Exception:
+                finite = True
+            if not finite:
+                raise FloatingPointError(f"non-finite metric at step {state.global_step}: {key}={value}")
 
 
-def load_model_and_processor(args):
-    import torch
-    from transformers import AutoConfig, AutoProcessor, set_seed
+def get_model_cls():
+    for name in ("AutoModelForImageTextToText", "AutoModelForVision2Seq", "Qwen3VLForConditionalGeneration"):
+        cls = getattr(transformers, name, None)
+        if cls is not None:
+            log(f"[model] loader={name}")
+            return cls
+    raise RuntimeError("no Qwen3-VL compatible model loader found in transformers")
 
-    set_seed(42)
+
+def freeze_parameters(model: torch.nn.Module, args: argparse.Namespace) -> None:
+    for name, param in model.named_parameters():
+        lower = name.lower()
+        is_vision = any(token in lower for token in ("visual", "vision"))
+        is_projector = any(token in lower for token in ("merger", "mm_projector", "multi_modal_projector"))
+        if is_vision and not args.tune_mm_vision and not is_projector:
+            param.requires_grad = False
+        if is_projector and not args.tune_mm_mlp:
+            param.requires_grad = False
+
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    pct = 100.0 * trainable / max(total, 1)
+    log(f"[model] trainable={trainable:,} / total={total:,} ({pct:.2f}%)")
+
+
+def load_model_and_processor(args: argparse.Namespace):
+    if args.deepspeed and HfDeepSpeedConfig is not None:
+        HfDeepSpeedConfig(args.deepspeed)
+        log(f"[deepspeed] config={args.deepspeed}")
 
     processor = AutoProcessor.from_pretrained(
-        args.model_name_or_path, trust_remote_code=True,
-        min_pixels=args.min_pixels, max_pixels=args.max_pixels,
+        args.model_name_or_path,
+        trust_remote_code=True,
+        min_pixels=args.min_pixels,
+        max_pixels=args.max_pixels,
     )
-    tok = getattr(processor, "tokenizer", processor)
-    if getattr(tok, "pad_token_id", None) is None:
-        tok.pad_token = tok.eos_token
+    tokenizer = getattr(processor, "tokenizer", processor)
+    if getattr(tokenizer, "pad_token_id", None) is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"
 
-    cfg = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-    if hasattr(cfg, "use_cache"):
-        cfg.use_cache = False
+    config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+    if hasattr(config, "use_cache"):
+        config.use_cache = False
+    if hasattr(config, "_attn_implementation"):
+        config._attn_implementation = "eager"
+    if hasattr(config, "attn_implementation"):
+        config.attn_implementation = "eager"
 
-    # AutoModel detection
-    try:
-        from transformers import AutoModelForImageTextToText as AutoModel
-    except Exception:
-        try:
-            from transformers import AutoModelForVision2Seq as AutoModel
-        except Exception:
-            from transformers import AutoModelForCausalLM as AutoModel
-
-    model = AutoModel.from_pretrained(
-        args.model_name_or_path, config=cfg, trust_remote_code=True,
-        torch_dtype="auto", low_cpu_mem_usage=True, attn_implementation="eager",
+    model = get_model_cls().from_pretrained(
+        args.model_name_or_path,
+        config=config,
+        trust_remote_code=True,
+        low_cpu_mem_usage=True,
+        torch_dtype="auto",
+        attn_implementation="eager",
     )
     if hasattr(model.config, "use_cache"):
         model.config.use_cache = False
-    if hasattr(model, "gradient_checkpointing_enable") and args.gradient_checkpointing:
-        model.gradient_checkpointing_enable()
+    if args.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
+        try:
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        except TypeError:
+            model.gradient_checkpointing_enable()
+        log("[model] gradient_checkpointing=enabled")
     if hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()
 
-    # Parameter freezing based on flags
-    for n, p in model.named_parameters():
-        ln = n.lower()
-        if "visual" in ln or "vision" in ln:
-            if not args.tune_mm_vision and "merger" not in ln and "mlp" not in ln:
-                p.requires_grad = False
-        if "merger" in ln or ("visual" in ln and "mlp" in ln):
-            p.requires_grad = args.tune_mm_mlp
-
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    total = sum(p.numel() for p in model.parameters())
-    log(f"[model] trainable={trainable:,} / total={total:,} ({100 * trainable / total:.1f}%)")
-
-    return model, processor, tok
+    freeze_parameters(model, args)
+    return model, processor, tokenizer
 
 
-# ── oom-safe trainer ──────────────────────────────────────────────────
+def build_training_args(args: argparse.Namespace) -> TrainingArguments:
+    kwargs: dict[str, Any] = {}
+    if args.gradient_checkpointing:
+        kwargs["gradient_checkpointing"] = True
+        kwargs["gradient_checkpointing_kwargs"] = {"use_reentrant": False}
 
-
-def build_trainer(model, processor, tok, dataset, collator, args):
-    from transformers import Trainer, TrainerCallback, TrainingArguments
-
-    class OomSafeTrainer(Trainer):
-        """Trainer that catches OOM and NaN gradients, skips bad batches."""
-
-        oom_count = 0
-        nan_count = 0
-        grad_nan_count = 0
-        param_nan_count = 0
-
-        def __init__(self, *a, **kw):
-            super().__init__(*a, **kw)
-            self.optimizer_skip_count = 0
-            self._skip_next_optimizer_step = False
-            self._skip_next_optimizer_reason = ""
-            self._last_nonfinite_grad_norm = None
-            self._patch_dist_ops()
-
-        def _nested_gather(self, tensors, name=None):
-            """Override to skip dist.all_gather which hangs on MACA NCCL."""
-            return tensors
-
-        @staticmethod
-        def _patch_dist_ops():
-            """Patch unstable NCCL ops for MACA platform."""
-            import torch
-            import torch.distributed as dist
-            if not dist.is_initialized():
-                return
-
-            # ── barrier patch ──────────────────────────────────────────
-            _orig_barrier = dist.barrier
-            def _safe_barrier(group=None, async_op=False, device_ids=None):
-                try:
-                    return _orig_barrier(group=group, async_op=async_op, device_ids=device_ids)
-                except Exception:
-                    pass
-                try:
-                    t = torch.zeros(1)
-                    dist.all_reduce(t, group=group, async_op=async_op)
-                except Exception:
-                    pass
-            dist.barrier = _safe_barrier
-
-        @staticmethod
-        def _scalar_to_float(value):
-            if value is None:
-                return None
-            try:
-                if hasattr(value, "detach"):
-                    value = value.detach()
-                if hasattr(value, "item"):
-                    return float(value.item())
-                return float(value)
-            except Exception:
-                return None
-
-        @classmethod
-        def _is_finite_scalar(cls, value) -> bool:
-            import math
-            v = cls._scalar_to_float(value)
-            return v is not None and math.isfinite(v)
-
-        @staticmethod
-        def _zero_loss_tensor(model):
-            import torch
-            for p in model.parameters():
-                if p.requires_grad:
-                    return p.sum() * 0.0
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            return torch.zeros((), device=device, requires_grad=True)
-
-        def _sync_bad_flag(self, local_bad: bool, device) -> bool:
-            """Return True on every rank if any rank reports a bad batch."""
-            import torch
-            import torch.distributed as dist
-
-            if not dist.is_available() or not dist.is_initialized() or dist.get_world_size() <= 1:
-                return bool(local_bad)
-            try:
-                flag = torch.tensor([1.0 if local_bad else 0.0], device=device)
-                dist.all_reduce(flag, op=dist.ReduceOp.MAX)
-                return bool(flag.item())
-            except Exception:
-                # If MACA NCCL rejects even the scalar sync, keep the local
-                # decision rather than hiding the original training error.
-                return bool(local_bad)
-
-        def _mark_skip_optimizer(self, reason: str) -> None:
-            self._skip_next_optimizer_step = True
-            self._skip_next_optimizer_reason = reason
-
-        def _zero_all_grads(self, model, optimizer=None) -> None:
-            """Clear normal gradients plus DeepSpeed ZeRO averaged gradients."""
-            objects = [model, optimizer, getattr(self, "optimizer", None), getattr(model, "optimizer", None)]
-            for obj in objects:
-                if obj is None or not hasattr(obj, "zero_grad"):
-                    continue
-                try:
-                    obj.zero_grad(set_to_none=True)
-                except TypeError:
-                    obj.zero_grad()
-                except Exception:
-                    pass
-
-            ds_optimizer = getattr(model, "optimizer", None)
-            if ds_optimizer is not None:
-                # DeepSpeed ZeRO-2 bf16 does not run the fp16 overflow path, so
-                # non-finite reduced partitions can sit in averaged_gradients
-                # until step().  Drop them when we have decided to skip.
-                if hasattr(ds_optimizer, "averaged_gradients"):
-                    try:
-                        ds_optimizer.averaged_gradients = {}
-                    except Exception:
-                        pass
-                if hasattr(ds_optimizer, "reset_cpu_buffers"):
-                    try:
-                        ds_optimizer.reset_cpu_buffers()
-                    except Exception:
-                        pass
-
-        def _wrap_optimizer_step(self, optimizer) -> None:
-            if optimizer is None or getattr(optimizer, "_oomsafe_step_wrapped", False):
-                return
-
-            original_step = optimizer.step
-            trainer = self
-
-            def _guarded_step(*step_args, **step_kwargs):
-                if trainer._skip_next_optimizer_step:
-                    reason = trainer._skip_next_optimizer_reason or "bad_grad"
-                    trainer.optimizer_skip_count += 1
-                    trainer._zero_all_grads(trainer.model, optimizer)
-                    trainer._skip_next_optimizer_step = False
-                    trainer._skip_next_optimizer_reason = ""
-                    if trainer.is_world_process_zero():
-                        msg = (f"[optimizer_skip] step={trainer.state.global_step} "
-                               f"reason={reason} total={trainer.optimizer_skip_count}")
-                        log(msg)
-                        with open(args.bad_batches, "a", encoding="utf-8") as fb:
-                            fb.write(msg + "\n")
-                    return None
-                return original_step(*step_args, **step_kwargs)
-
-            optimizer.step = _guarded_step
-            optimizer._oomsafe_step_wrapped = True
-
-        def _guard_pre_optimizer_step(self, model, optimizer=None) -> None:
-            """Skip the update if DeepSpeed reports a non-finite global grad norm."""
-            import torch
-
-            grad_norm = None
-            if hasattr(model, "get_global_grad_norm"):
-                try:
-                    grad_norm = model.get_global_grad_norm()
-                except Exception:
-                    grad_norm = None
-
-            local_bad = grad_norm is not None and not self._is_finite_scalar(grad_norm)
-            if grad_norm is None:
-                local_bad = self._has_nan_grad(model)
-
-            device = None
-            if hasattr(grad_norm, "device"):
-                device = grad_norm.device
-            elif torch.cuda.is_available():
-                device = torch.device("cuda", torch.cuda.current_device())
-            else:
-                device = torch.device("cpu")
-
-            bad_any = self._sync_bad_flag(local_bad, device)
-            if not bad_any:
-                return
-
-            self.grad_nan_count += 1
-            self._last_nonfinite_grad_norm = self._scalar_to_float(grad_norm)
-            self._mark_skip_optimizer("nonfinite_grad_norm")
-            self._zero_all_grads(model, optimizer)
-            if self.is_world_process_zero():
-                msg = (f"[grad_nan] skip optimizer step={self.state.global_step} "
-                       f"grad_norm={self._last_nonfinite_grad_norm} "
-                       f"total_events={self.grad_nan_count}")
-                log(msg)
-                with open(args.bad_batches, "a", encoding="utf-8") as fb:
-                    fb.write(msg + "\n")
-
-        def _has_nan_grad(self, model) -> bool:
-            import torch
-            # DeepSpeed ZeRO-2: check wrapped model params for NaN grads
-            m = model.module if hasattr(model, 'module') else model
-            for p in m.parameters():
-                if p.grad is not None:
-                    if not torch.isfinite(p.grad).all():
-                        return True
-            return False
-
-        def _sanitize_params(self, model):
-            """Replace NaN/Inf parameter values with 0.0 before forward pass."""
-            import torch
-            m = model.module if hasattr(model, 'module') else model
-            fixed = 0
-            with torch.no_grad():
-                for p in m.parameters():
-                    if p.requires_grad and not torch.isfinite(p).all():
-                        nan_mask = ~torch.isfinite(p.data)
-                        p.data[nan_mask] = 0.0
-                        fixed += 1
-            if fixed > 0:
-                self.param_nan_count += 1
-                log(f"[param_nan] sanitized {fixed} NaN params "
-                    f"step={self.state.global_step} total_events={self.param_nan_count}")
-
-        def _sanitize_grads(self, model):
-            """Replace NaN/Inf gradient values with 0.0 after backward pass."""
-            import torch
-            m = model.module if hasattr(model, 'module') else model
-            fixed = 0
-            for p in m.parameters():
-                if p.grad is not None and not torch.isfinite(p.grad).all():
-                    nan_mask = ~torch.isfinite(p.grad)
-                    p.grad[nan_mask] = 0.0
-                    fixed += 1
-            if fixed > 0:
-                self.grad_nan_count += 1
-                log(f"[grad_nan] sanitized {fixed} NaN grads "
-                    f"step={self.state.global_step} total_events={self.grad_nan_count}")
-                if self.is_world_process_zero():
-                    with open(args.bad_batches, "a", encoding="utf-8") as fb:
-                        fb.write(f"[grad_nan] step={self.state.global_step} "
-                                 f"fixed={fixed} grads total={self.grad_nan_count}\n")
-
-        def _compute_loss_safe(self, model, inputs):
-            """Compute loss forward pass. Returns (loss, loss_val)."""
-            model.train()
-            inputs = self._prepare_inputs(inputs)
-            with self.compute_loss_context_manager():
-                loss = self.compute_loss(model, inputs)
-            if self.args.n_gpu > 1:
-                loss = loss.mean()
-            loss_val = loss.item() if loss.dim() == 0 else loss.detach().mean().item()
-            return loss, loss_val
-
-        def training_step(self, model, inputs, num_items_in_batch=None):
-            import torch
-            denom = self.args.gradient_accumulation_steps
-
-            # ── Fix 2: sanitize parameters before forward (catch NaN that leaked from prior micro-batches) ──
-            self._sanitize_params(model)
-
-            for attempt in range(args.max_retry_per_batch + 1):
-                try:
-                    loss, loss_val = self._compute_loss_safe(model, inputs)
-
-                    # Check every rank BEFORE backward.  If any rank has a bad
-                    # loss, all ranks run the same zero-loss backward and the
-                    # optimizer step is skipped at the accumulation boundary.
-                    local_bad_loss = loss_val == 0.0 or not bool(torch.isfinite(loss))
-                    bad_loss = self._sync_bad_flag(local_bad_loss, loss.device)
-                    if bad_loss:
-                        self.nan_count += 1
-                        reason = f"loss={loss_val}" if local_bad_loss else "peer_bad_loss"
-                        self._mark_skip_optimizer(reason)
-                        self._zero_all_grads(model)
-                        z = self._zero_loss_tensor(model)
-                        self.accelerator.backward(z)
-                        self._zero_all_grads(model)
-                        if self.is_world_process_zero():
-                            log(f"[bad_batch] {reason} step={self.state.global_step} "
-                                f"nan_count={self.nan_count}")
-                        if self.is_world_process_zero():
-                            with open(args.bad_batches, "a", encoding="utf-8") as fb:
-                                fb.write(f"[bad_batch] step={self.state.global_step} "
-                                         f"{reason} nan_count={self.nan_count}\n")
-                        return z.detach() / denom
-
-                    # Clean loss — safe to backward (gradients sync via DeepSpeed)
-                    self.accelerator.backward(loss)
-
-                    # ── Fix 1: sanitize NaN gradients after backward (catches NaN that forward missed) ──
-                    self._sanitize_grads(model)
-
-                    return loss.detach() / denom
-
-                except (torch.cuda.OutOfMemoryError, RuntimeError) as e:
-                    msg = str(e)
-                    if "out of memory" not in msg.lower() and "oom" not in msg.lower():
-                        raise
-                    self.oom_count += 1
-                    log(f"[oom] batch failed (attempt {attempt + 1}/{args.max_retry_per_batch + 1})")
-                    try:
-                        model.zero_grad(set_to_none=True)
-                    except TypeError:
-                        model.zero_grad()
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    if attempt < args.max_retry_per_batch:
-                        continue
-                    log(f"[skip] giving up on batch after {args.max_retry_per_batch + 1} attempts")
-                    if self.is_world_process_zero():
-                        with open(args.bad_batches, "a", encoding="utf-8") as fb:
-                            fb.write(f"oom: {msg}\n")
-                    z = self._zero_loss_tensor(model)
-                    # Participate in the same pre-backward bad-batch sync that
-                    # healthy ranks enter after computing their loss.
-                    self._sync_bad_flag(True, z.device)
-                    self._mark_skip_optimizer("oom")
-                    self._zero_all_grads(model)
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    self.accelerator.backward(z)
-                    self._zero_all_grads(model)
-                    return z.detach()
-
-        def _maybe_log_save_evaluate(self, tr_loss, *a, **kw):
-            if a and (a[0] is None or isinstance(a[0], (int, float)) or hasattr(a[0], "item")):
-                grad_norm = a[0]
-                if grad_norm is not None and not self._is_finite_scalar(grad_norm):
-                    a = (0.0,) + a[1:]
-            return super()._maybe_log_save_evaluate(tr_loss, *a, **kw)
-
-    class GradGuardCallback(TrainerCallback):
-        def __init__(self, owner: OomSafeTrainer):
-            self.owner = owner
-
-        def on_train_begin(self, args_, state, control, **kwargs):
-            optimizer_ = kwargs.get("optimizer") or getattr(self.owner, "optimizer", None)
-            self.owner._wrap_optimizer_step(optimizer_)
-            return control
-
-        def on_pre_optimizer_step(self, args_, state, control, **kwargs):
-            model_ = kwargs.get("model") or self.owner.model
-            optimizer_ = kwargs.get("optimizer") or getattr(self.owner, "optimizer", None)
-            self.owner._wrap_optimizer_step(optimizer_)
-            self.owner._guard_pre_optimizer_step(model_, optimizer_)
-            return control
-
-    targs = TrainingArguments(
+    return TrainingArguments(
         output_dir=args.output_dir,
         num_train_epochs=args.num_train_epochs,
         max_steps=args.max_steps,
         per_device_train_batch_size=args.per_device_train_batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         learning_rate=args.learning_rate,
-        warmup_ratio=args.warmup_ratio,
         weight_decay=args.weight_decay,
+        warmup_ratio=args.warmup_ratio,
         max_grad_norm=args.max_grad_norm,
         lr_scheduler_type=args.lr_scheduler_type,
         logging_steps=args.logging_steps,
-        save_strategy=args.save_strategy,
-        save_steps=args.save_steps,
-        save_total_limit=args.save_total_limit,
+        save_strategy="no",
+        save_only_model=True,
+        save_safetensors=True,
         bf16=args.bf16,
         deepspeed=args.deepspeed,
         remove_unused_columns=False,
         dataloader_num_workers=args.dataloader_num_workers,
+        dataloader_pin_memory=True,
         report_to=[],
-        gradient_checkpointing=args.gradient_checkpointing,
-        eval_strategy=args.eval_strategy,
+        optim=args.optim,
+        disable_tqdm=False,
+        seed=args.seed,
+        data_seed=args.seed,
+        **kwargs,
     )
-    trainer = OomSafeTrainer(
-        model=model, args=targs, train_dataset=dataset,
-        data_collator=collator, processing_class=processor,
+
+
+def save_final_model(trainer: Trainer, processor: Any, args: argparse.Namespace) -> None:
+    trainer.accelerator.wait_for_everyone()
+    if not trainer.is_world_process_zero():
+        trainer.accelerator.wait_for_everyone()
+        return
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model_to_save = trainer.model
+    if hasattr(trainer.model_wrapped, "module"):
+        model_to_save = trainer.model_wrapped.module
+    elif hasattr(model_to_save, "module"):
+        model_to_save = model_to_save.module
+
+    log(f"[save] writing final model only to {output_dir}")
+    model_to_save.save_pretrained(
+        output_dir,
+        safe_serialization=True,
+        max_shard_size=args.max_shard_size,
     )
-    trainer.add_callback(GradGuardCallback(trainer))
-    return trainer
+    processor.save_pretrained(output_dir)
+    trainer.state.save_to_json(str(output_dir / "trainer_state.json"))
+    with open(output_dir / "run_summary.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "data_path": args.data_path,
+                "model_name_or_path": args.model_name_or_path,
+                "num_train_epochs": args.num_train_epochs,
+                "per_device_train_batch_size": args.per_device_train_batch_size,
+                "gradient_accumulation_steps": args.gradient_accumulation_steps,
+                "learning_rate": args.learning_rate,
+                "save_policy": "final_model_only_no_intermediate_checkpoints",
+                "transformers_version": transformers.__version__,
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+    trainer.accelerator.wait_for_everyone()
 
 
-# ── batch size probing ───────────────────────────────────────────────
+def add_common_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--model-name-or-path", "--model_name_or_path", dest="model_name_or_path", required=True)
+    parser.add_argument("--data-path", "--data_path", dest="data_path", required=True)
+    parser.add_argument("--output-dir", "--output_dir", dest="output_dir", required=True)
+    parser.add_argument("--deepspeed", "--deepspeed_config", dest="deepspeed", default=None)
+    parser.add_argument("--num-train-epochs", "--num_train_epochs", dest="num_train_epochs", type=float, default=1.0)
+    parser.add_argument("--max-steps", "--max_steps", dest="max_steps", type=int, default=-1)
+    parser.add_argument("--per-device-train-batch-size", "--per_device_train_batch_size", dest="per_device_train_batch_size", type=int, default=8)
+    parser.add_argument("--gradient-accumulation-steps", "--gradient_accumulation_steps", dest="gradient_accumulation_steps", type=int, default=4)
+    parser.add_argument("--learning-rate", "--learning_rate", dest="learning_rate", type=float, default=5e-6)
+    parser.add_argument("--weight-decay", "--weight_decay", dest="weight_decay", type=float, default=0.0)
+    parser.add_argument("--warmup-ratio", "--warmup_ratio", dest="warmup_ratio", type=float, default=0.03)
+    parser.add_argument("--max-grad-norm", "--max_grad_norm", dest="max_grad_norm", type=float, default=1.0)
+    parser.add_argument("--lr-scheduler-type", "--lr_scheduler_type", dest="lr_scheduler_type", default="cosine")
+    parser.add_argument("--logging-steps", "--logging_steps", dest="logging_steps", type=int, default=1)
+    parser.add_argument("--model-max-length", "--model_max_length", "--max_seq_length", dest="model_max_length", type=int, default=16384)
+    parser.add_argument("--min-pixels", "--min_pixels", dest="min_pixels", type=int, default=50176)
+    parser.add_argument("--max-pixels", "--max_pixels", dest="max_pixels", type=int, default=50176)
+    parser.add_argument("--video-min-frames", "--video_min_frames", dest="video_min_frames", type=int, default=32)
+    parser.add_argument("--video-max-frames", "--video_max_frames", dest="video_max_frames", type=int, default=32)
+    parser.add_argument("--dataloader-num-workers", "--dataloader_num_workers", dest="dataloader_num_workers", type=int, default=4)
+    parser.add_argument("--optim", default="adamw_torch")
+    parser.add_argument("--max-shard-size", "--max_shard_size", dest="max_shard_size", default="4GB")
+    parser.add_argument("--limit-samples", "--limit_samples", dest="limit_samples", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--bf16", action="store_true")
+    parser.add_argument("--gradient-checkpointing", "--gradient_checkpointing", dest="gradient_checkpointing", action="store_true")
+    parser.add_argument("--tune-mm-vision", "--tune_mm_vision", dest="tune_mm_vision", action="store_true")
+    parser.add_argument("--tune-mm-mlp", "--tune_mm_mlp", dest="tune_mm_mlp", action=argparse.BooleanOptionalAction, default=True)
 
 
-def probe_batch_size(args) -> int:
-    """Try decreasing batch sizes to find one that fits in GPU memory."""
-    import torch
-
-    sizes = [8, 6, 4, 2, 1]
-    for bs in sizes:
-        log(f"[probe] trying per_device_batch_size={bs}")
-        args.per_device_train_batch_size = bs
-        try:
-            model, processor, tok = load_model_and_processor(args)
-            ds = JsonlDataset(args.data_path)
-            # Use a tiny slice for probing
-            ds.rows = ds.rows[:4]
-            collator = SafeCollator(processor, tok, args.bad_samples, args)
-            trainer = build_trainer(model, processor, tok, ds, collator, args)
-            trainer.train()
-            log(f"[probe] batch_size={bs} OK")
-            del model, trainer
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            return bs
-        except (torch.cuda.OutOfMemoryError, RuntimeError) as e:
-            msg = str(e)
-            if "out of memory" not in msg.lower() and "oom" not in msg.lower():
-                log(f"[probe] unexpected error with bs={bs}: {msg[:200]}")
-            else:
-                log(f"[probe] bs={bs} OOM")
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            continue
-    raise RuntimeError("all batch sizes OOM")
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    train_parser = sub.add_parser("train")
+    add_common_args(train_parser)
+    inspect_parser = sub.add_parser("inspect")
+    add_common_args(inspect_parser)
+    args, _ = parser.parse_known_args()
+    return args
 
 
-# ── smoke test ────────────────────────────────────────────────────────
+def inspect_data(args: argparse.Namespace) -> None:
+    set_seed(args.seed)
+    _model_unused, processor, _tokenizer_unused = None, None, None
+    processor = AutoProcessor.from_pretrained(
+        args.model_name_or_path,
+        trust_remote_code=True,
+        min_pixels=args.min_pixels,
+        max_pixels=args.max_pixels,
+    )
+    dataset = JsonlConversationDataset(args.data_path, limit_samples=args.per_device_train_batch_size)
+    collator = VisionConversationCollator(processor, args)
+    batch = collator([dataset[i] for i in range(min(len(dataset), args.per_device_train_batch_size))])
+    shapes = {k: tuple(v.shape) for k, v in batch.items() if torch.is_tensor(v)}
+    valid_labels = int((batch["labels"] != -100).sum().item())
+    log(f"[inspect] samples={len(dataset)} shapes={shapes} valid_labels={valid_labels}")
 
 
-def smoke(args) -> int:
-    """Run first N batches and report results. Returns chosen batch size."""
-    import torch
+def train(args: argparse.Namespace) -> None:
+    set_seed(args.seed)
+    log(f"[env] transformers={transformers.__version__}")
+    log(f"[data] path={args.data_path}")
+    log(f"[output] dir={args.output_dir}")
 
-    log(f"[smoke] data={args.data_path}")
-    log(f"[smoke] smoke_batches={args.smoke_batches}")
+    model, processor, _tokenizer = load_model_and_processor(args)
+    dataset = JsonlConversationDataset(args.data_path, limit_samples=args.limit_samples)
+    collator = VisionConversationCollator(processor, args)
 
-    # Probe batch size if not forced
-    if args.per_device_train_batch_size == 0 or args.probe:
-        bs = probe_batch_size(args)
-        args.per_device_train_batch_size = bs
-        log(f"[smoke] chosen batch_size={bs}")
-    else:
-        log(f"[smoke] using batch_size={args.per_device_train_batch_size}")
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    effective_bs = world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
+    expected_steps = math.ceil(len(dataset) / max(effective_bs, 1))
+    log(f"[train] samples={len(dataset)} world_size={world_size} effective_batch={effective_bs} expected_steps={expected_steps}")
+    log("[train] save_strategy=no; final model will be saved after trainer.train()")
 
-    model, processor, tok = load_model_and_processor(args)
-    ds = JsonlDataset(args.data_path)
-    # Limit to smoke batches
-    samples_per_gpu = args.per_device_train_batch_size * args.gradient_accumulation_steps
-    max_samples = args.smoke_batches * samples_per_gpu
-    if args.smoke_batches > 0 and len(ds.rows) > max_samples:
-        ds.rows = ds.rows[:max_samples]
-    log(f"[smoke] smoke samples={len(ds.rows)}")
-
-    collator = SafeCollator(processor, tok, args.bad_samples, args)
-    trainer = build_trainer(model, processor, tok, ds, collator, args)
-    resume = getattr(args, "resume_from_checkpoint", "") or None
-    trainer.train(resume_from_checkpoint=resume)
-
-    log(f"[smoke] done. oom_count={trainer.oom_count}, nan_loss_count={trainer.nan_count}, "
-        f"grad_nan_count={trainer.grad_nan_count}, param_nan_count={trainer.param_nan_count}, "
-        f"optimizer_skip_count={trainer.optimizer_skip_count}, "
-        f"collator_skipped={collator.skipped}, collator_timed_out={collator.timed_out}")
-    bad_batches = 0
-    if Path(args.bad_batches).exists():
-        bad_batches = len(Path(args.bad_batches).read_text(encoding="utf-8").splitlines())
-    log(f"[smoke] bad_batches={bad_batches}")
-    log(f"[smoke] batch_size={args.per_device_train_batch_size} OK for full training")
-
-    # Save final model if full training (checkpoints already saved by trainer)
-    if not args.save_strategy == "no":
-        trainer.save_model(args.output_dir)
-        processor.save_pretrained(args.output_dir)
-        log(f"[smoke] final model saved to {args.output_dir}")
-
-    return args.per_device_train_batch_size
-
-
-# ── full train ────────────────────────────────────────────────────────
-
-
-def train(args) -> None:
-    import torch
-
-    if args.per_device_train_batch_size == 0 or args.probe:
-        bs = probe_batch_size(args)
-        args.per_device_train_batch_size = bs
-        log(f"[train] probed batch_size={bs}")
-
-    model, processor, tok = load_model_and_processor(args)
-    ds = JsonlDataset(args.data_path)
-    log(f"[train] total samples={len(ds.rows)}")
-    collator = SafeCollator(processor, tok, args.bad_samples, args)
-    trainer = build_trainer(model, processor, tok, ds, collator, args)
+    trainer = Trainer(
+        model=model,
+        args=build_training_args(args),
+        train_dataset=dataset,
+        data_collator=collator,
+        processing_class=processor,
+        callbacks=[AbortOnNonFiniteLog()],
+    )
     trainer.train()
-    log(f"[train] done. oom_count={trainer.oom_count}, nan_loss_count={trainer.nan_count}, "
-        f"grad_nan_count={trainer.grad_nan_count}, param_nan_count={trainer.param_nan_count}, "
-        f"optimizer_skip_count={trainer.optimizer_skip_count}, "
-        f"collator_skipped={collator.skipped}, collator_timed_out={collator.timed_out}")
-    trainer.save_model(args.output_dir)
-    processor.save_pretrained(args.output_dir)
-
-
-# ── cli ───────────────────────────────────────────────────────────────
+    log(f"[train] finished global_step={trainer.state.global_step}")
+    if collator.empty_label_fixes:
+        log(f"[data] empty_label_fixes={collator.empty_label_fixes}")
+    save_final_model(trainer, processor, args)
+    log("[done] final-only expert SFT complete")
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Expert SFT training")
-    p.add_argument("--local_rank", type=int, default=0, help="deepspeed injected")
-    sub = p.add_subparsers(dest="cmd", required=True)
-
-    # Shared args
-    def add_common(s):
-        s.add_argument("--model-name-or-path", type=str,
-                       default="/data/msz/models/Qwen3-VL-8B-Instruct")
-        s.add_argument("--data-path", type=str,
-                       default="/data/msz/point/data_expert/expert_grounding_mix.jsonl")
-        s.add_argument("--output-dir", type=str, default="/data/msz/point/outputs/expert_sft")
-        s.add_argument("--deepspeed", type=str,
-                       default="/data/msz/point/configs/zero2.json")
-        s.add_argument("--per-device-train-batch-size", type=int, default=8)
-        s.add_argument("--gradient-accumulation-steps", type=int, default=4)
-        s.add_argument("--learning-rate", type=float, default=5e-6)
-        s.add_argument("--num-train-epochs", type=float, default=1)
-        s.add_argument("--max-steps", type=int, default=-1)
-        s.add_argument("--model-max-length", type=int, default=16384)
-        s.add_argument("--min-pixels", type=int, default=50176)
-        s.add_argument("--max-pixels", type=int, default=50176)
-        s.add_argument("--video-max-frames", type=int, default=32)
-        s.add_argument("--video-min-frames", type=int, default=32)
-        s.add_argument("--weight-decay", type=float, default=0)
-        s.add_argument("--warmup-ratio", type=float, default=0.03)
-        s.add_argument("--max-grad-norm", type=float, default=1.0)
-        s.add_argument("--lr-scheduler-type", type=str, default="cosine")
-        s.add_argument("--bf16", action="store_true", default=True)
-        s.add_argument("--tune-mm-vision", action="store_true", default=False)
-        s.add_argument("--tune-mm-mlp", action="store_true", default=True)
-        s.add_argument("--tune-mm-llm", action="store_true", default=True)
-        s.add_argument("--gradient-checkpointing", action="store_true", default=True)
-        s.add_argument("--dataloader-num-workers", type=int, default=4)
-        s.add_argument("--eval-strategy", type=str, default="no")
-        s.add_argument("--save-strategy", type=str, default="steps")
-        s.add_argument("--save-steps", type=int, default=1000)
-        s.add_argument("--save-total-limit", type=int, default=1)
-        s.add_argument("--batch-timeout", type=int, default=120,
-                       help="max seconds per batch before skipping (0=no timeout)")
-        s.add_argument("--logging-steps", type=int, default=1)
-        s.add_argument("--max-retry-per-batch", type=int, default=3,
-                       help="max retries per OOM batch before skipping")
-        s.add_argument("--bad-samples", type=str,
-                       default="/data/msz/point/bad/bad_samples.jsonl")
-        s.add_argument("--bad-batches", type=str,
-                       default="/data/msz/point/bad/bad_batches.log")
-        s.add_argument("--resume-from-checkpoint", type=str, default="")
-        s.add_argument("--probe", action="store_true",
-                       help="auto-probe best batch size (8->6->4->2->1)")
-
-    c_smoke = sub.add_parser("smoke", help="smoke test: first N batches")
-    add_common(c_smoke)
-    c_smoke.add_argument("--smoke-batches", type=int, default=100,
-                         help="number of batches to run for smoke test")
-
-    c_train = sub.add_parser("train", help="full SFT training")
-    add_common(c_train)
-
-    args = p.parse_args()
-
-    # Ensure bad dir exists
-    Path(args.bad_samples).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.bad_batches).parent.mkdir(parents=True, exist_ok=True)
-
-    if args.cmd == "smoke":
-        smoke(args)
-    else:
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    args = parse_args()
+    if args.command == "inspect":
+        inspect_data(args)
+    elif args.command == "train":
         train(args)
+    else:  # pragma: no cover
+        raise ValueError(args.command)
 
 
 if __name__ == "__main__":

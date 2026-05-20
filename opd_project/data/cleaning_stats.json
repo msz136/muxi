@@ -1,0 +1,38 @@
+[
+  {
+    "input": "/data/msz/opd_project/data/prompt_pool.jsonl",
+    "output": "/data/msz/opd_project/data/prompt_pool_clean.jsonl",
+    "input_rows": 37780,
+    "output_rows": 32857,
+    "dropped": {
+      "missing_image": 4923
+    },
+    "source_before": {
+      "robopoint": 27780,
+      "sharerobot_affordance": 5000,
+      "general_vqa_replay": 5000
+    },
+    "source_after": {
+      "robopoint": 27780,
+      "general_vqa_replay": 4869,
+      "sharerobot_affordance": 208
+    },
+    "old_format_conflicts_before": 27780,
+    "require_existing_media": true
+  },
+  {
+    "input": "/data/msz/opd_project/data/eval_robopoint_500.jsonl",
+    "output": "/data/msz/opd_project/data/eval_robopoint_500_clean.jsonl",
+    "input_rows": 500,
+    "output_rows": 500,
+    "dropped": {},
+    "source_before": {
+      "robopoint": 500
+    },
+    "source_after": {
+      "robopoint": 500
+    },
+    "old_format_conflicts_before": 500,
+    "require_existing_media": true
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "model": "/data/msz/models/Qwen3-VL-8B-Instruct",
+  "data": "/data/msz/opd_project/data/semantic_nav_box_v1/eval/semantic_nav_box_heldout_object_ref_eval_v1.jsonl",
+  "num_samples": 1251,
+  "format_ok": 440,
+  "format_rate": 0.3517186250999201,
+  "mean_iou": 0.11837800580698186,
+  "iou_at_0_3": 0.11136363636363636,
+  "iou_at_0_5": 0.03636363636363636,
+  "mean_center_error": 188.40714719706128,
+  "mean_coord_mae": 163.9431818181818,
+  "results_path": "/data/msz/point/outputs/eval_latest_region_object_matrix_20260520_104104/base__latest_object.jsonl"
+}

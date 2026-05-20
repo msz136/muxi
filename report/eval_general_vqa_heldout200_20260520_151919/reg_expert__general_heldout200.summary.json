@@ -1,0 +1,10 @@
+{
+  "model": "/data/msz/models/expert_reg_v1",
+  "eval_set": "/data/msz/point/data_eval/general_robo2vlm_heldout200_seed20260520.jsonl",
+  "num_samples": 200,
+  "normalized_exact": 0.065,
+  "relaxed_match": 0.31,
+  "mean_token_f1": 0.1590909090909091,
+  "option_samples": 200,
+  "results_path": "/data/msz/point/outputs/eval_general_vqa_heldout200_20260520_151919/reg_expert__general_heldout200.jsonl"
+}

@@ -1,0 +1,10 @@
+{
+  "model": "/data/msz/models/8b_base",
+  "eval_set": "/data/msz/point/data_eval/general_robo2vlm_heldout200_seed20260520.jsonl",
+  "num_samples": 200,
+  "normalized_exact": 0.0,
+  "relaxed_match": 0.295,
+  "mean_token_f1": 0.0,
+  "option_samples": 200,
+  "results_path": "/data/msz/point/outputs/eval_general_vqa_heldout200_20260520_151919/base__general_heldout200.jsonl"
+}

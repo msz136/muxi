@@ -1,0 +1,472 @@
+#!/usr/bin/env python3
+"""Local labeler for the semantic navigation box-grounding pilot manifest.
+
+This script is meant to run on the Codex desktop side after the remote manifest
+and images tar have been downloaded. It uses PIL for reliable cropping and a
+OpenAI-compatible vision endpoint for short object/region labels.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import io
+import json
+import random
+import re
+import threading
+import time
+import urllib.request
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Any
+
+from PIL import Image, ImageDraw, ImageFont
+
+
+SYSTEM_PROMPT = (
+    "You are a semantic navigation grounding assistant. Given an image and "
+    "target object information, return the target object's bounding box in "
+    "coordinates from 0 to 1000. Return only <box>[[x1,y1],[x2,y2]]</box>."
+)
+
+RELATION_PHRASES = {
+    "on": "on the highlighted area or surface",
+    "left": "to the left of the highlighted object",
+    "right": "to the right of the highlighted object",
+    "inside": "inside the highlighted container or area",
+    "beside": "beside the highlighted object",
+    "front": "in front of the highlighted object",
+    "behind": "behind the highlighted object",
+    "above": "above the highlighted object",
+    "below": "below the highlighted object",
+    "between": "between the highlighted objects",
+}
+
+ANCHOR_BY_RELATION = {
+    "on": "highlighted area or surface",
+    "inside": "highlighted container or area",
+    "between": "highlighted objects",
+}
+
+GENERIC_OBJECT_NAMES = {
+    "object",
+    "item",
+    "thing",
+    "target object",
+    "unknown object",
+    "unidentified object",
+}
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    with path.open("r", encoding="utf-8") as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def append_jsonl(path: Path, row: dict[str, Any], lock: threading.Lock) -> None:
+    line = json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n"
+    with lock:
+        with path.open("a", encoding="utf-8") as f:
+            f.write(line)
+
+
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+def write_json(path: Path, obj: Any) -> None:
+    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def local_image_path(images_root: Path, remote_path: str) -> Path:
+    return images_root / remote_path.lstrip("/").replace("/", "\\")
+
+
+def crop_data_url(image_path: Path, box: list[list[int]], max_side: int) -> str:
+    image = Image.open(image_path).convert("RGB")
+    width, height = image.size
+    x1 = max(0, min(width - 1, round(box[0][0] / 1000 * width)))
+    y1 = max(0, min(height - 1, round(box[0][1] / 1000 * height)))
+    x2 = max(x1 + 1, min(width, round(box[1][0] / 1000 * width)))
+    y2 = max(y1 + 1, min(height, round(box[1][1] / 1000 * height)))
+    crop = image.crop((x1, y1, x2, y2))
+    crop.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    crop.save(buf, format="JPEG", quality=88)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def parse_jsonish(text: str) -> dict[str, Any]:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    match = re.search(r"\{.*\}", text, re.S)
+    if match:
+        text = match.group(0)
+    try:
+        obj = json.loads(text)
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {"object_name": text[:80].strip() or "target object"}
+
+
+def clean_label(value: Any) -> str:
+    text = str(value or "").strip().strip("\"'")
+    text = re.sub(r"^(a|an|the)\s+", "", text, flags=re.I)
+    text = re.sub(r"[^A-Za-z0-9 ,/_-]+", "", text)
+    text = re.sub(r"\s+", " ", text).strip().lower()
+    return text[:80] or "target object"
+
+
+def normalize_annotation(obj: dict[str, Any], raw: str) -> dict[str, Any]:
+    object_name = clean_label(obj.get("object_name") or obj.get("label") or obj.get("name"))
+    attrs = obj.get("attributes") or []
+    if isinstance(attrs, str):
+        attrs = [attrs]
+    if not isinstance(attrs, list):
+        attrs = []
+    attrs = [clean_label(x) for x in attrs if clean_label(x)][:5]
+    region_type = str(obj.get("region_type") or obj.get("type") or "unclear").strip().lower()
+    if region_type not in {"object", "surface", "free_space", "container", "unclear"}:
+        region_type = "unclear"
+    confidence = str(obj.get("confidence") or "medium").strip().lower()
+    if confidence not in {"high", "medium", "low"}:
+        confidence = "medium"
+    return {
+        "object_name": object_name,
+        "attributes": attrs,
+        "region_type": region_type,
+        "confidence": confidence,
+        "raw_response": raw,
+    }
+
+
+def relation_phrase(relation: str) -> str:
+    return RELATION_PHRASES.get(relation, "matching the highlighted spatial relation")
+
+
+def anchor_object(relation: str) -> str:
+    return ANCHOR_BY_RELATION.get(relation, "highlighted object")
+
+
+def quality(annotation: dict[str, Any]) -> str:
+    if annotation.get("confidence") == "low":
+        return "weak"
+    if annotation.get("region_type") == "unclear":
+        return "weak"
+    if annotation.get("object_name") in GENERIC_OBJECT_NAMES:
+        return "weak"
+    return "high_quality"
+
+
+def box_answer(box: list[list[int]]) -> str:
+    return "<box>" + json.dumps(box, separators=(",", ":")) + "</box>"
+
+
+def call_labeler(args: argparse.Namespace, row: dict[str, Any], image_path: Path) -> dict[str, Any]:
+    data_url = crop_data_url(image_path, row["box"], args.crop_max_side)
+    prompt = (
+        "You are labeling a cropped target region for semantic navigation "
+        "box-grounding data.\n"
+        "The crop is the target box synthesized from RoboPoint points.\n"
+        f"The relation label is: {relation_phrase(row['relation'])}.\n"
+        "The original RoboPoint instruction was:\n"
+        f"{row['old_user']}\n\n"
+        "Return strict JSON only:\n"
+        "{\n"
+        '  "object_name": "short English noun phrase for the main target in the crop, 1-5 words",\n'
+        '  "attributes": ["optional visual attributes"],\n'
+        '  "region_type": "object|surface|free_space|container|unclear",\n'
+        '  "confidence": "high|medium|low"\n'
+        "}\n"
+        "Avoid generic labels like object or item. If the crop is mostly empty/free "
+        "space, use a navigational region label such as empty space, countertop area, "
+        "or container interior."
+    )
+    payload = {
+        "model": args.model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }
+        ],
+        "temperature": args.temperature,
+        "max_tokens": args.max_tokens,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    headers = {"Content-Type": "application/json"}
+    if args.api_key:
+        headers["Authorization"] = "Bearer " + args.api_key
+    body = json.dumps(payload).encode("utf-8")
+
+    last_error = ""
+    for attempt in range(1, args.retries + 1):
+        try:
+            req = urllib.request.Request(args.api_url, data=body, headers=headers)
+            with urllib.request.urlopen(req, timeout=args.request_timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            raw = data["choices"][0]["message"]["content"]
+            return normalize_annotation(parse_jsonish(raw), raw)
+        except Exception as exc:  # noqa: BLE001 - robust batch logging
+            last_error = repr(exc)
+            if attempt < args.retries:
+                time.sleep(args.retry_sleep * attempt)
+    return {
+        "object_name": "target object",
+        "attributes": [],
+        "region_type": "unclear",
+        "confidence": "low",
+        "raw_response": last_error,
+        "error": last_error,
+    }
+
+
+def variant_rows(row: dict[str, Any], annotation: dict[str, Any], image_path_for_dataset: str) -> list[dict[str, Any]]:
+    obj = annotation["object_name"]
+    relation = row["relation"]
+    rel = relation_phrase(relation)
+    anchor = anchor_object(relation)
+    answer = box_answer(row["box"])
+    prompts = [
+        (
+            "obj_only",
+            f"<image>\nFind the {obj}. Return only <box>[[x1,y1],[x2,y2]]</box> "
+            "with integer coordinates from 0 to 1000.",
+            {"object_name": obj, "relation": None, "anchor_object": None},
+        ),
+        (
+            "relation_only",
+            f"<image>\nFind the target region {rel}. Return only <box>[[x1,y1],[x2,y2]]</box> "
+            "with integer coordinates from 0 to 1000.",
+            {"object_name": None, "relation": rel, "anchor_object": anchor},
+        ),
+        (
+            "obj_relation",
+            "<image>\nTarget object information:\n"
+            + json.dumps(
+                {"object_name": obj, "relation": rel, "anchor_object": anchor},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            + "\nReturn only the bounding box as <box>[[x1,y1],[x2,y2]]</box>.",
+            {"object_name": obj, "relation": rel, "anchor_object": anchor},
+        ),
+    ]
+    rows = []
+    q = quality(annotation)
+    for mode, prompt, target in prompts:
+        rows.append(
+            {
+                "dataset": "semantic_nav_box_grounding_pilot_1k",
+                "image": [image_path_for_dataset],
+                "video": [],
+                "target": {**target, "attributes": annotation.get("attributes", []), "box": row["box"]},
+                "conversations": [
+                    {"from": "system", "value": SYSTEM_PROMPT},
+                    {"from": "human", "value": prompt},
+                    {"from": "gpt", "value": answer},
+                ],
+                "metadata": {
+                    "source": "robopoint_box_grounding_proxy",
+                    "task_type": "box_grounding",
+                    "prompt_mode": mode,
+                    "quality": q,
+                    "label_source": "qwen-122b_crop_annotation",
+                    "region_type": annotation.get("region_type"),
+                    "confidence": annotation.get("confidence"),
+                    "conversion": "points_bbox_margin_v1",
+                    "original_prompt_id": row["prompt_id"],
+                    "relation": relation,
+                    "point_count": len(row["points"]),
+                },
+            }
+        )
+    return rows
+
+
+def process_one(args: argparse.Namespace, row: dict[str, Any]) -> dict[str, Any]:
+    image_path = local_image_path(args.images_root, row["image"])
+    if not image_path.exists():
+        annotation = {
+            "object_name": "target object",
+            "attributes": [],
+            "region_type": "unclear",
+            "confidence": "low",
+            "raw_response": f"missing local image: {image_path}",
+            "error": "missing_image",
+        }
+    else:
+        annotation = call_labeler(args, row, image_path)
+    return {
+        "idx": row.get("idx"),
+        **row,
+        "local_image": str(image_path),
+        "annotation": annotation,
+        "quality": quality(annotation),
+    }
+
+
+def render_preview(path: Path, annotations: list[dict[str, Any]], *, sample_size: int, seed: int) -> None:
+    rng = random.Random(seed)
+    rows = annotations[:]
+    rng.shuffle(rows)
+    rows = rows[:sample_size]
+    try:
+        title_font = ImageFont.truetype("arial.ttf", 16)
+        small_font = ImageFont.truetype("arial.ttf", 12)
+    except Exception:
+        title_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+
+    cards: list[Image.Image] = []
+    for row in rows:
+        image_path = Path(row["local_image"])
+        if not image_path.exists():
+            continue
+        image = Image.open(image_path).convert("RGB")
+        width, height = image.size
+        image.thumbnail((360, 260), Image.Resampling.LANCZOS)
+        dw, dh = image.size
+        sx = dw / width
+        sy = dh / height
+        box = row["box"]
+        x1 = round(box[0][0] / 1000 * width * sx)
+        y1 = round(box[0][1] / 1000 * height * sy)
+        x2 = round(box[1][0] / 1000 * width * sx)
+        y2 = round(box[1][1] / 1000 * height * sy)
+        draw = ImageDraw.Draw(image, "RGBA")
+        draw.rectangle([x1, y1, x2, y2], fill=(0, 210, 255, 45), outline=(0, 210, 255, 255), width=3)
+        for px, py in row.get("points", [])[:30]:
+            x = round(px / 1000 * width * sx)
+            y = round(py / 1000 * height * sy)
+            draw.ellipse([x - 3, y - 3, x + 3, y + 3], fill=(255, 40, 40, 230))
+        card = Image.new("RGB", (380, 380), (248, 250, 252))
+        card.paste(image, ((380 - dw) // 2, 8))
+        d = ImageDraw.Draw(card)
+        y = dh + 18
+        ann = row["annotation"]
+        d.text((10, y), f"{ann['object_name']} | {row['relation']} | {row['quality']}", fill=(15, 23, 42), font=title_font)
+        y += 22
+        d.text((10, y), f"{ann['region_type']} / {ann['confidence']}  {box_answer(box)}", fill=(2, 132, 199), font=small_font)
+        y += 18
+        prompt = f"Find the {ann['object_name']} {relation_phrase(row['relation'])}."
+        for line in re.findall(r".{1,52}(?:\s|$)", prompt)[:3]:
+            d.text((10, y), line.strip(), fill=(51, 65, 85), font=small_font)
+            y += 14
+        cards.append(card)
+
+    if not cards:
+        return
+    cols = 4
+    rows_n = (len(cards) + cols - 1) // cols
+    sheet = Image.new("RGB", (cols * 380, rows_n * 380), (226, 232, 240))
+    for i, card in enumerate(cards):
+        sheet.paste(card, ((i % cols) * 380, (i // cols) * 380))
+    sheet.save(path)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--images-root", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--api-url", required=True)
+    parser.add_argument("--api-key", default="")
+    parser.add_argument("--model", default="qwen-122b")
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--max-tokens", type=int, default=160)
+    parser.add_argument("--request-timeout", type=int, default=90)
+    parser.add_argument("--retries", type=int, default=3)
+    parser.add_argument("--retry-sleep", type=float, default=1.5)
+    parser.add_argument("--workers", type=int, default=6)
+    parser.add_argument("--crop-max-side", type=int, default=512)
+    parser.add_argument("--preview-size", type=int, default=32)
+    parser.add_argument("--seed", type=int, default=20260518)
+    args = parser.parse_args()
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    manifest = read_jsonl(args.manifest)
+    for idx, row in enumerate(manifest, start=1):
+        row["idx"] = idx
+
+    annotations_path = args.output_dir / "semantic_nav_box_grounding_pilot_1k_base_annotations.jsonl"
+    done: dict[str, dict[str, Any]] = {}
+    if annotations_path.exists():
+        for row in read_jsonl(annotations_path):
+            done[row["prompt_id"]] = row
+
+    lock = threading.Lock()
+    pending = [row for row in manifest if row["prompt_id"] not in done]
+    print(f"[start] manifest={len(manifest)} done={len(done)} pending={len(pending)} workers={args.workers}", flush=True)
+
+    completed = 0
+    if pending:
+        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+            futures = {executor.submit(process_one, args, row): row for row in pending}
+            for fut in as_completed(futures):
+                record = fut.result()
+                append_jsonl(annotations_path, record, lock)
+                done[record["prompt_id"]] = record
+                completed += 1
+                if completed % 25 == 0 or completed == len(pending):
+                    ann = record["annotation"]
+                    print(
+                        f"[label] {completed}/{len(pending)} total={len(done)}/{len(manifest)} "
+                        f"last={ann['object_name']} {ann['region_type']}/{ann['confidence']} {record['quality']}",
+                        flush=True,
+                    )
+
+    annotations = [done[row["prompt_id"]] for row in manifest if row["prompt_id"] in done]
+    all_rows: list[dict[str, Any]] = []
+    hq_rows: list[dict[str, Any]] = []
+    for record in annotations:
+        rows = variant_rows(record, record["annotation"], record["image"])
+        all_rows.extend(rows)
+        if record["quality"] == "high_quality":
+            hq_rows.extend(rows)
+
+    all_jsonl = args.output_dir / "semantic_nav_box_grounding_pilot_1k_all.jsonl"
+    hq_jsonl = args.output_dir / "semantic_nav_box_grounding_pilot_1k_high_quality.jsonl"
+    summary_json = args.output_dir / "semantic_nav_box_grounding_pilot_1k_summary.json"
+    preview_png = args.output_dir / "semantic_nav_box_grounding_pilot_1k_preview.png"
+    write_jsonl(all_jsonl, all_rows)
+    write_jsonl(hq_jsonl, hq_rows)
+
+    counters = {
+        "quality": Counter(row["quality"] for row in annotations),
+        "region_type": Counter(row["annotation"].get("region_type") for row in annotations),
+        "confidence": Counter(row["annotation"].get("confidence") for row in annotations),
+        "relation": Counter(row.get("relation") for row in annotations),
+        "object_name_top50": Counter(row["annotation"].get("object_name") for row in annotations).most_common(50),
+    }
+    summary = {
+        "base_manifest": len(manifest),
+        "base_annotated": len(annotations),
+        "base_high_quality": counters["quality"].get("high_quality", 0),
+        "base_weak": counters["quality"].get("weak", 0),
+        "train_rows_all": len(all_rows),
+        "train_rows_high_quality": len(hq_rows),
+        "outputs": {
+            "all_jsonl": str(all_jsonl),
+            "high_quality_jsonl": str(hq_jsonl),
+            "base_annotations_jsonl": str(annotations_path),
+            "preview_png": str(preview_png),
+        },
+        "counters": {k: dict(v) if isinstance(v, Counter) else v for k, v in counters.items()},
+    }
+    write_json(summary_json, summary)
+    render_preview(preview_png, annotations, sample_size=args.preview_size, seed=args.seed)
+    print("[done] " + json.dumps(summary, ensure_ascii=False, separators=(",", ":")), flush=True)
+
+
+if __name__ == "__main__":
+    main()

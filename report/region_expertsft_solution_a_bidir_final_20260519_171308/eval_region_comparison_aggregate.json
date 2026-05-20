@@ -1,0 +1,877 @@
+{
+  "run_id": "region_expertsft_solution_a_bidir_final_20260519_171308",
+  "date": "2026-05-19",
+  "train": {
+    "data": "/data/msz/opd_project/data/semantic_nav_region_box_v1/solution_a_bidir_train_v1/semantic_nav_region_solution_a_bidir_train_v1_high_quality.jsonl",
+    "rows": 10290,
+    "base_model": "/data/msz/models/Qwen3-VL-8B-Instruct",
+    "output": "/data/msz/point/outputs/region_expertsft_solution_a_bidir_final_20260519_171308",
+    "per_device_train_batch_size": 1,
+    "gradient_accumulation_steps": 4,
+    "num_gpus": 8,
+    "effective_batch_size": 32,
+    "learning_rate": 0.000005,
+    "expected_steps": 322,
+    "save_policy": "save_strategy=no; final model only; checkpoint count 0",
+    "trainer": "standard HuggingFace Trainer + DeepSpeed ZeRO-2"
+  },
+  "eval": {
+    "data": "/data/msz/opd_project/data/semantic_nav_region_box_v1/eval/semantic_nav_region_solution_a_bidir_eval_v1.jsonl",
+    "num_samples": 144,
+    "seed": 20260519,
+    "max_new_tokens": 64,
+    "expert_summary": {
+      "model": "/data/msz/point/outputs/region_expertsft_solution_a_bidir_final_20260519_171308",
+      "data": "/data/msz/opd_project/data/semantic_nav_region_box_v1/eval/semantic_nav_region_solution_a_bidir_eval_v1.jsonl",
+      "num_samples": 144,
+      "format_ok": 144,
+      "format_rate": 1,
+      "mean_iou": 0.23706857662844275,
+      "iou_at_0_3": 0.3402777777777778,
+      "iou_at_0_5": 0.18055555555555555,
+      "mean_center_error": 84.18877434546411,
+      "mean_coord_mae": 54.34027777777778,
+      "results_path": "/data/msz/point/outputs/region_expertsft_solution_a_bidir_final_20260519_171308/eval_region_expert_144.jsonl"
+    },
+    "base_summary": {
+      "model": "/data/msz/models/Qwen3-VL-8B-Instruct",
+      "data": "/data/msz/opd_project/data/semantic_nav_region_box_v1/eval/semantic_nav_region_solution_a_bidir_eval_v1.jsonl",
+      "num_samples": 144,
+      "format_ok": 63,
+      "format_rate": 0.4375,
+      "mean_iou": 0.11567825170990306,
+      "iou_at_0_3": 0.07936507936507936,
+      "iou_at_0_5": 0,
+      "mean_center_error": 143.65922101773822,
+      "mean_coord_mae": 109.26190476190476,
+      "results_path": "/data/msz/point/outputs/region_expertsft_solution_a_bidir_final_20260519_171308/eval_region_base_144.jsonl"
+    },
+    "expert_metrics_all_denominator": {
+      "n": 144,
+      "format_ok": 144,
+      "format_rate": 1,
+      "mean_iou_ok": 0.23706857662844286,
+      "mean_iou_all": 0.23706857662844286,
+      "median_iou_all": 0.17014656404101502,
+      "iou_at_0_1_all": 0.6527777777777778,
+      "iou_at_0_3_all": 0.3402777777777778,
+      "iou_at_0_5_all": 0.18055555555555555,
+      "iou_at_0_3_ok": 0.3402777777777778,
+      "iou_at_0_5_ok": 0.18055555555555555,
+      "mean_center_error_ok": 84.18877434546407,
+      "median_center_error_ok": 46.350051867164105,
+      "mean_coord_mae_ok": 54.34027777777778
+    },
+    "base_metrics_all_denominator": {
+      "n": 144,
+      "format_ok": 63,
+      "format_rate": 0.4375,
+      "mean_iou_ok": 0.1156782517099031,
+      "mean_iou_all": 0.0506092351230826,
+      "median_iou_all": 0,
+      "iou_at_0_1_all": 0.2152777777777778,
+      "iou_at_0_3_all": 0.034722222222222224,
+      "iou_at_0_5_all": 0,
+      "iou_at_0_3_ok": 0.07936507936507936,
+      "iou_at_0_5_ok": 0,
+      "mean_center_error_ok": 143.65922101773822,
+      "median_center_error_ok": 78.10249675906654,
+      "mean_coord_mae_ok": 109.26190476190476
+    },
+    "by_prompt_mode": [
+      {
+        "value": "description_plain",
+        "n": 48,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.5208333333333334,
+        "expert_mean_iou_all": 0.22961455013573753,
+        "base_mean_iou_all": 0.0676404092286444,
+        "delta_mean_iou_all": 0.16197414090709314,
+        "expert_iou_at_0_3_all": 0.3125,
+        "base_iou_at_0_3_all": 0.041666666666666664,
+        "delta_iou_at_0_3_all": 0.2708333333333333
+      },
+      {
+        "value": "description_relation",
+        "n": 48,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.4375,
+        "expert_mean_iou_all": 0.2377432090646012,
+        "base_mean_iou_all": 0.04684802371702842,
+        "delta_mean_iou_all": 0.19089518534757277,
+        "expert_iou_at_0_3_all": 0.3541666666666667,
+        "base_iou_at_0_3_all": 0.041666666666666664,
+        "delta_iou_at_0_3_all": 0.3125
+      },
+      {
+        "value": "semantic_json",
+        "n": 48,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.3541666666666667,
+        "expert_mean_iou_all": 0.24384797068498962,
+        "base_mean_iou_all": 0.03733927242357498,
+        "delta_mean_iou_all": 0.20650869826141463,
+        "expert_iou_at_0_3_all": 0.3541666666666667,
+        "base_iou_at_0_3_all": 0.020833333333333332,
+        "delta_iou_at_0_3_all": 0.33333333333333337
+      }
+    ],
+    "by_region_category": [
+      {
+        "value": "free_space",
+        "n": 30,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.4666666666666667,
+        "expert_mean_iou_all": 0.29658011027728254,
+        "base_mean_iou_all": 0.09148132220994072,
+        "delta_mean_iou_all": 0.20509878806734183,
+        "expert_iou_at_0_3_all": 0.4666666666666667,
+        "base_iou_at_0_3_all": 0.1,
+        "delta_iou_at_0_3_all": 0.3666666666666667
+      },
+      {
+        "value": "surface",
+        "n": 114,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.4298245614035088,
+        "expert_mean_iou_all": 0.2214076467208533,
+        "base_mean_iou_all": 0.039853422731804145,
+        "delta_mean_iou_all": 0.18155422398904916,
+        "expert_iou_at_0_3_all": 0.30701754385964913,
+        "base_iou_at_0_3_all": 0.017543859649122806,
+        "delta_iou_at_0_3_all": 0.2894736842105263
+      }
+    ],
+    "by_relation": [
+      {
+        "value": "above",
+        "n": 9,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.5555555555555556,
+        "expert_mean_iou_all": 0.07018174075270141,
+        "base_mean_iou_all": 0.10701099185441902,
+        "delta_mean_iou_all": -0.036829251101717614,
+        "expert_iou_at_0_3_all": 0,
+        "base_iou_at_0_3_all": 0.1111111111111111,
+        "delta_iou_at_0_3_all": -0.1111111111111111
+      },
+      {
+        "value": "behind",
+        "n": 3,
+        "expert_format_rate": 1,
+        "base_format_rate": 0,
+        "expert_mean_iou_all": 0.2544252643203218,
+        "base_mean_iou_all": 0,
+        "delta_mean_iou_all": 0.2544252643203218,
+        "expert_iou_at_0_3_all": 0.3333333333333333,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0.3333333333333333
+      },
+      {
+        "value": "below",
+        "n": 9,
+        "expert_format_rate": 1,
+        "base_format_rate": 1,
+        "expert_mean_iou_all": 0.20974312411149026,
+        "base_mean_iou_all": 0.12915533216632008,
+        "delta_mean_iou_all": 0.08058779194517018,
+        "expert_iou_at_0_3_all": 0.3333333333333333,
+        "base_iou_at_0_3_all": 0.3333333333333333,
+        "delta_iou_at_0_3_all": 0
+      },
+      {
+        "value": "beside",
+        "n": 9,
+        "expert_format_rate": 1,
+        "base_format_rate": 0,
+        "expert_mean_iou_all": 0.3255093917882954,
+        "base_mean_iou_all": 0,
+        "delta_mean_iou_all": 0.3255093917882954,
+        "expert_iou_at_0_3_all": 0.3333333333333333,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0.3333333333333333
+      },
+      {
+        "value": "between",
+        "n": 12,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.4166666666666667,
+        "expert_mean_iou_all": 0.2986160920507378,
+        "base_mean_iou_all": 0.08838610215598576,
+        "delta_mean_iou_all": 0.21022998989475206,
+        "expert_iou_at_0_3_all": 0.5,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0.5
+      },
+      {
+        "value": "front",
+        "n": 12,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.25,
+        "expert_mean_iou_all": 0.12135267545203197,
+        "base_mean_iou_all": 0,
+        "delta_mean_iou_all": 0.12135267545203197,
+        "expert_iou_at_0_3_all": 0.16666666666666666,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0.16666666666666666
+      },
+      {
+        "value": "inside",
+        "n": 3,
+        "expert_format_rate": 1,
+        "base_format_rate": 1,
+        "expert_mean_iou_all": 0.16031042863283584,
+        "base_mean_iou_all": 0.1217561103196974,
+        "delta_mean_iou_all": 0.03855431831313845,
+        "expert_iou_at_0_3_all": 0,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0
+      },
+      {
+        "value": "left",
+        "n": 12,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.3333333333333333,
+        "expert_mean_iou_all": 0.286675112736922,
+        "base_mean_iou_all": 0.03939155356252154,
+        "delta_mean_iou_all": 0.24728355917440042,
+        "expert_iou_at_0_3_all": 0.5,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0.5
+      },
+      {
+        "value": "on",
+        "n": 33,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.45454545454545453,
+        "expert_mean_iou_all": 0.2007768360251693,
+        "base_mean_iou_all": 0.04173754018844907,
+        "delta_mean_iou_all": 0.15903929583672022,
+        "expert_iou_at_0_3_all": 0.2727272727272727,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0.2727272727272727
+      },
+      {
+        "value": "on-back",
+        "n": 3,
+        "expert_format_rate": 1,
+        "base_format_rate": 1,
+        "expert_mean_iou_all": 0.037835752857844164,
+        "base_mean_iou_all": 0.1066961038961039,
+        "delta_mean_iou_all": -0.06886035103825974,
+        "expert_iou_at_0_3_all": 0,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0
+      },
+      {
+        "value": "on-front",
+        "n": 9,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.4444444444444444,
+        "expert_mean_iou_all": 0.43364622118027646,
+        "base_mean_iou_all": 0.05064016244967928,
+        "delta_mean_iou_all": 0.3830060587305972,
+        "expert_iou_at_0_3_all": 0.6666666666666666,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0.6666666666666666
+      },
+      {
+        "value": "on-left",
+        "n": 6,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.6666666666666666,
+        "expert_mean_iou_all": 0.3428910779271945,
+        "base_mean_iou_all": 0.10548886600187991,
+        "delta_mean_iou_all": 0.23740221192531458,
+        "expert_iou_at_0_3_all": 0.8333333333333334,
+        "base_iou_at_0_3_all": 0.16666666666666666,
+        "delta_iou_at_0_3_all": 0.6666666666666667
+      },
+      {
+        "value": "on-right",
+        "n": 3,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.6666666666666666,
+        "expert_mean_iou_all": 0.7441019507558425,
+        "base_mean_iou_all": 0.0645590827485748,
+        "delta_mean_iou_all": 0.6795428680072677,
+        "expert_iou_at_0_3_all": 1,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 1
+      },
+      {
+        "value": "right",
+        "n": 21,
+        "expert_format_rate": 1,
+        "base_format_rate": 0.2857142857142857,
+        "expert_mean_iou_all": 0.19206771071572862,
+        "base_mean_iou_all": 0.013515890368800618,
+        "delta_mean_iou_all": 0.17855182034692801,
+        "expert_iou_at_0_3_all": 0.23809523809523808,
+        "base_iou_at_0_3_all": 0,
+        "delta_iou_at_0_3_all": 0.23809523809523808
+      }
+    ],
+    "top_expert": [
+      {
+        "sample_no": 141,
+        "row_index": 119,
+        "relation": "on-right",
+        "region_category": "surface",
+        "iou": 0.7551144666341939,
+        "center_error": 4.527692569068709,
+        "target_box": [
+          157,
+          828,
+          282,
+          881
+        ],
+        "pred_box": [
+          156,
+          821,
+          274,
+          887
+        ],
+        "description": "A vacant space on the right-hand side of the red-highlighted area, located on a flat surface within a kitchen setting."
+      },
+      {
+        "sample_no": 45,
+        "row_index": 118,
+        "relation": "on-right",
+        "region_category": "surface",
+        "iou": 0.7512489833856164,
+        "center_error": 6.363961030678928,
+        "target_box": [
+          157,
+          828,
+          282,
+          881
+        ],
+        "pred_box": [
+          151,
+          817,
+          279,
+          883
+        ],
+        "description": "A vacant space on the right-hand side of the red-highlighted area, located on a flat surface within a kitchen setting."
+      },
+      {
+        "sample_no": 75,
+        "row_index": 131,
+        "relation": "on-front",
+        "region_category": "surface",
+        "iou": 0.7504990019960079,
+        "center_error": 7.5,
+        "target_box": [
+          316,
+          844,
+          420,
+          900
+        ],
+        "pred_box": [
+          312,
+          844,
+          412,
+          891
+        ],
+        "description": "The unoccupied area on the frontal aspect of the plane marked by the red rectangular border."
+      },
+      {
+        "sample_no": 114,
+        "row_index": 117,
+        "relation": "on-right",
+        "region_category": "surface",
+        "iou": 0.7259424022477171,
+        "center_error": 8.32165848854662,
+        "target_box": [
+          157,
+          828,
+          282,
+          881
+        ],
+        "pred_box": [
+          151,
+          817,
+          274,
+          883
+        ],
+        "description": "A vacant space on the right-hand side of the red-highlighted area, located on a flat surface within a kitchen setting."
+      },
+      {
+        "sample_no": 72,
+        "row_index": 2,
+        "relation": "below",
+        "region_category": "free_space",
+        "iou": 0.6613145258103241,
+        "center_error": 23.717082451262844,
+        "target_box": [
+          318,
+          431,
+          485,
+          563
+        ],
+        "pred_box": [
+          314,
+          450,
+          474,
+          589
+        ],
+        "description": "The vacant area on the tiled floor inside the open cabinet, directly beneath the green object on the countertop."
+      }
+    ],
+    "worst_expert": [
+      {
+        "sample_no": 1,
+        "row_index": 25,
+        "relation": "front",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0,
+        "delta_iou": 0,
+        "center_error": 137.67806651751033,
+        "target_box": [
+          46,
+          540,
+          186,
+          581
+        ],
+        "pred_box": [
+          207,
+          544,
+          300,
+          591
+        ],
+        "description": "The vacant area on the countertop directly in front of the red-highlighted object.",
+        "prediction": "<box>[[207,544],[300,591]]</box>"
+      },
+      {
+        "sample_no": 10,
+        "row_index": 84,
+        "relation": "below",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0,
+        "delta_iou": 0,
+        "center_error": 196.3733688665548,
+        "target_box": [
+          485,
+          642,
+          613,
+          677
+        ],
+        "pred_box": [
+          438,
+          457,
+          557,
+          483
+        ],
+        "description": "The vacant area on the shelf directly underneath the red-bordered item.",
+        "prediction": "<box>[[438,457],[557,483]]</box>"
+      },
+      {
+        "sample_no": 12,
+        "row_index": 50,
+        "relation": "right",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0.007279498899610631,
+        "delta_iou": -0.007279498899610631,
+        "center_error": 77.31914381315923,
+        "target_box": [
+          415,
+          555,
+          465,
+          620
+        ],
+        "pred_box": [
+          484,
+          544,
+          543,
+          583
+        ],
+        "description": "A small vacant area on the countertop immediately to the right of the red-highlighted rectangular object, near a black stand and a cow figurine",
+        "prediction": "<box>[[484,544],[543,583]]</box>"
+      },
+      {
+        "sample_no": 17,
+        "row_index": 49,
+        "relation": "right",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0.002373887240356083,
+        "delta_iou": -0.002373887240356083,
+        "center_error": 78.77182237323191,
+        "target_box": [
+          415,
+          555,
+          465,
+          620
+        ],
+        "pred_box": [
+          484,
+          542,
+          544,
+          579
+        ],
+        "description": "A small vacant area on the countertop immediately to the right of the red-highlighted rectangular object, near a black stand and a cow figurine",
+        "prediction": "<box>[[484,542],[544,579]]</box>"
+      },
+      {
+        "sample_no": 23,
+        "row_index": 73,
+        "relation": "above",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0,
+        "delta_iou": 0,
+        "center_error": 239.20388792826927,
+        "target_box": [
+          392,
+          525,
+          469,
+          575
+        ],
+        "pred_box": [
+          352,
+          771,
+          452,
+          804
+        ],
+        "description": "The vacant space directly above the red-highlighted wooden cabinet, situated beneath the open upper cabinet door and adjacent to the metallic range hood.",
+        "prediction": "<box>[[352,771],[452,804]]</box>"
+      },
+      {
+        "sample_no": 25,
+        "row_index": 39,
+        "relation": "below",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0,
+        "delta_iou": 0,
+        "center_error": 271.00276751354403,
+        "target_box": [
+          325,
+          794,
+          445,
+          820
+        ],
+        "pred_box": [
+          310,
+          523,
+          427,
+          550
+        ],
+        "description": "The blank area on the countertop directly beneath the red-highlighted object.",
+        "prediction": "<box>[[310,523],[427,550]]</box>"
+      },
+      {
+        "sample_no": 26,
+        "row_index": 51,
+        "relation": "on",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0.023655913978494623,
+        "delta_iou": -0.023655913978494623,
+        "center_error": 136.5283853270081,
+        "target_box": [
+          653,
+          477,
+          763,
+          541
+        ],
+        "pred_box": [
+          774,
+          467,
+          914,
+          527
+        ],
+        "description": "The vacant space on the countertop surface within the red rectangle, located to the right of the yellow tray and next to the black object.",
+        "prediction": "<box>[[774,467],[914,527]]</box>"
+      },
+      {
+        "sample_no": 33,
+        "row_index": 53,
+        "relation": "on",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0.022556390977443608,
+        "delta_iou": -0.022556390977443608,
+        "center_error": 135.2368293032634,
+        "target_box": [
+          653,
+          477,
+          763,
+          541
+        ],
+        "pred_box": [
+          774,
+          473,
+          912,
+          529
+        ],
+        "description": "The vacant space on the countertop surface within the red rectangle, located to the right of the yellow tray and next to the black object.",
+        "prediction": "<box>[[774,473],[912,529]]</box>"
+      },
+      {
+        "sample_no": 34,
+        "row_index": 52,
+        "relation": "on",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0.01188051595383571,
+        "delta_iou": -0.01188051595383571,
+        "center_error": 138.73085453495918,
+        "target_box": [
+          653,
+          477,
+          763,
+          541
+        ],
+        "pred_box": [
+          779,
+          473,
+          914,
+          529
+        ],
+        "description": "The vacant space on the countertop surface within the red rectangle, located to the right of the yellow tray and next to the black object.",
+        "prediction": "<box>[[779,473],[914,529]]</box>"
+      },
+      {
+        "sample_no": 53,
+        "row_index": 40,
+        "relation": "below",
+        "region_category": "surface",
+        "iou": 0,
+        "base_iou": 0,
+        "delta_iou": 0,
+        "center_error": 275.83917415769645,
+        "target_box": [
+          325,
+          794,
+          445,
+          820
+        ],
+        "pred_box": [
+          300,
+          519,
+          427,
+          545
+        ],
+        "description": "The blank area on the countertop directly beneath the red-highlighted object.",
+        "prediction": "<box>[[300,519],[427,545]]</box>"
+      }
+    ],
+    "biggest_gains": [
+      {
+        "sample_no": 45,
+        "row_index": 118,
+        "relation": "on-right",
+        "region_category": "surface",
+        "expert_iou": 0.7512489833856164,
+        "base_iou": 0,
+        "delta_iou": 0.7512489833856164,
+        "description": "A vacant space on the right-hand side of the red-highlighted area, located on a flat surface within a kitchen setting."
+      },
+      {
+        "sample_no": 141,
+        "row_index": 119,
+        "relation": "on-right",
+        "region_category": "surface",
+        "expert_iou": 0.7551144666341939,
+        "base_iou": 0.06760204081632654,
+        "delta_iou": 0.6875124258178673,
+        "description": "A vacant space on the right-hand side of the red-highlighted area, located on a flat surface within a kitchen setting."
+      },
+      {
+        "sample_no": 56,
+        "row_index": 6,
+        "relation": "right",
+        "region_category": "free_space",
+        "expert_iou": 0.6135492117596932,
+        "base_iou": 0,
+        "delta_iou": 0.6135492117596932,
+        "description": "The vacant area on the floor situated to the right of the white object."
+      },
+      {
+        "sample_no": 114,
+        "row_index": 117,
+        "relation": "on-right",
+        "region_category": "surface",
+        "expert_iou": 0.7259424022477171,
+        "base_iou": 0.12607520742939787,
+        "delta_iou": 0.5998671948183192,
+        "description": "A vacant space on the right-hand side of the red-highlighted area, located on a flat surface within a kitchen setting."
+      },
+      {
+        "sample_no": 75,
+        "row_index": 131,
+        "relation": "on-front",
+        "region_category": "surface",
+        "expert_iou": 0.7504990019960079,
+        "base_iou": 0.15873515794778117,
+        "delta_iou": 0.5917638440482268,
+        "description": "The unoccupied area on the frontal aspect of the plane marked by the red rectangular border."
+      },
+      {
+        "sample_no": 101,
+        "row_index": 132,
+        "relation": "beside",
+        "region_category": "surface",
+        "expert_iou": 0.5711629828547821,
+        "base_iou": 0,
+        "delta_iou": 0.5711629828547821,
+        "description": "A small blue object resting on the dark countertop surface, positioned to the right of the red-highlighted notepad and near the edge of the counter."
+      },
+      {
+        "sample_no": 46,
+        "row_index": 133,
+        "relation": "beside",
+        "region_category": "surface",
+        "expert_iou": 0.5635896494769682,
+        "base_iou": 0,
+        "delta_iou": 0.5635896494769682,
+        "description": "A small blue object resting on the dark countertop surface, positioned to the right of the red-highlighted notepad and near the edge of the counter."
+      },
+      {
+        "sample_no": 77,
+        "row_index": 88,
+        "relation": "on-left",
+        "region_category": "free_space",
+        "expert_iou": 0.5604943625325238,
+        "base_iou": 0,
+        "delta_iou": 0.5604943625325238,
+        "description": "An unoccupied area on the left part of the plane demarcated by the red rectangle."
+      },
+      {
+        "sample_no": 32,
+        "row_index": 80,
+        "relation": "on",
+        "region_category": "surface",
+        "expert_iou": 0.5561563037601376,
+        "base_iou": 0,
+        "delta_iou": 0.5561563037601376,
+        "description": "A vacant area on the outlined plane, situated on the surface of a desk near a mobile phone and a small orange object."
+      },
+      {
+        "sample_no": 106,
+        "row_index": 7,
+        "relation": "right",
+        "region_category": "free_space",
+        "expert_iou": 0.5414316702819957,
+        "base_iou": 0,
+        "delta_iou": 0.5414316702819957,
+        "description": "The vacant area on the floor situated to the right of the white object."
+      }
+    ],
+    "biggest_drops": [
+      {
+        "sample_no": 137,
+        "row_index": 83,
+        "relation": "above",
+        "region_category": "surface",
+        "expert_iou": 0.003966597077244259,
+        "base_iou": 0.4464457462621317,
+        "delta_iou": -0.4424791491848874,
+        "description": "The vacant area on the shelf directly above the red-highlighted object."
+      },
+      {
+        "sample_no": 30,
+        "row_index": 93,
+        "relation": "between",
+        "region_category": "free_space",
+        "expert_iou": 0.026777637054459923,
+        "base_iou": 0.29628266470371734,
+        "delta_iou": -0.26950502764925743,
+        "description": "The vacant area on the black surface located between the white plate and the yellow cone."
+      },
+      {
+        "sample_no": 48,
+        "row_index": 12,
+        "relation": "above",
+        "region_category": "surface",
+        "expert_iou": 0.08396295393614428,
+        "base_iou": 0.2509471006277134,
+        "delta_iou": -0.16698414669156914,
+        "description": "The vacant space on the shelf directly above the white box with purple text."
+      },
+      {
+        "sample_no": 40,
+        "row_index": 114,
+        "relation": "on-left",
+        "region_category": "surface",
+        "expert_iou": 0.3386676590993673,
+        "base_iou": 0.45963370799338166,
+        "delta_iou": -0.12096604889401436,
+        "description": "A vacant area on the left-hand side of the marked surface."
+      },
+      {
+        "sample_no": 112,
+        "row_index": 35,
+        "relation": "on-back",
+        "region_category": "surface",
+        "expert_iou": 0,
+        "base_iou": 0.11906666666666667,
+        "delta_iou": -0.11906666666666667,
+        "description": "A vacant area on the wooden surface directly behind the red-highlighted section of the white keyboard."
+      },
+      {
+        "sample_no": 54,
+        "row_index": 34,
+        "relation": "on-back",
+        "region_category": "surface",
+        "expert_iou": 0,
+        "base_iou": 0.08504761904761905,
+        "delta_iou": -0.08504761904761905,
+        "description": "A vacant area on the wooden surface directly behind the red-highlighted section of the white keyboard."
+      },
+      {
+        "sample_no": 121,
+        "row_index": 37,
+        "relation": "on",
+        "region_category": "surface",
+        "expert_iou": 0.08948012049989561,
+        "base_iou": 0.16218604270637324,
+        "delta_iou": -0.07270592220647763,
+        "description": "A vacant area on the outlined plane within the red-highlighted region"
+      },
+      {
+        "sample_no": 133,
+        "row_index": 42,
+        "relation": "on",
+        "region_category": "surface",
+        "expert_iou": 0.1145320197044335,
+        "base_iou": 0.1667652276759314,
+        "delta_iou": -0.052233207971497914,
+        "description": "The vacant space on the bottom surface of the open drawer, adjacent to a small white object and a black circular item"
+      },
+      {
+        "sample_no": 70,
+        "row_index": 48,
+        "relation": "right",
+        "region_category": "surface",
+        "expert_iou": 0,
+        "base_iou": 0.047505938242280284,
+        "delta_iou": -0.047505938242280284,
+        "description": "A small vacant area on the countertop immediately to the right of the red-highlighted rectangular object, near a black stand and a cow figurine"
+      },
+      {
+        "sample_no": 84,
+        "row_index": 36,
+        "relation": "on",
+        "region_category": "surface",
+        "expert_iou": 0.07118590751808745,
+        "base_iou": 0.10733815653481162,
+        "delta_iou": -0.03615224901672416,
+        "description": "A vacant area on the outlined plane within the red-highlighted region"
+      }
+    ]
+  },
+  "local_files": {
+    "expert_jsonl": "report/region_expertsft_solution_a_bidir_final_20260519_171308/eval_region_expert_144.jsonl",
+    "expert_summary": "report/region_expertsft_solution_a_bidir_final_20260519_171308/eval_region_expert_144.summary.json",
+    "base_jsonl": "report/region_expertsft_solution_a_bidir_final_20260519_171308/eval_region_base_144.jsonl",
+    "base_summary": "report/region_expertsft_solution_a_bidir_final_20260519_171308/eval_region_base_144.summary.json",
+    "eval_data_copy": "report/region_expertsft_solution_a_bidir_final_20260519_171308/semantic_nav_region_solution_a_bidir_eval_v1.jsonl",
+    "aggregate_json": "report/region_expertsft_solution_a_bidir_final_20260519_171308/eval_region_comparison_aggregate.json"
+  }
+}

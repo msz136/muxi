@@ -1,0 +1,13 @@
+{
+  "model": "/data/msz/point/outputs/opd_online_mix_v1_2048_final_20260520_142529",
+  "data": "/data/msz/opd_project/data/semantic_nav_box_v1/eval/semantic_nav_box_heldout_object_ref_eval_v1.jsonl",
+  "num_samples": 1251,
+  "format_ok": 1251,
+  "format_rate": 1.0,
+  "mean_iou": 0.17318695445622467,
+  "iou_at_0_3": 0.2270183852917666,
+  "iou_at_0_5": 0.15267785771382894,
+  "mean_center_error": 197.35818839546425,
+  "mean_coord_mae": 137.53277378097522,
+  "results_path": "/data/msz/point/outputs/eval_domain_four_models_v1_20260520_152926/opd_v1__latest_object.jsonl"
+}

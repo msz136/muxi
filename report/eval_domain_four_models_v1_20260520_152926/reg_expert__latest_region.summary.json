@@ -1,0 +1,13 @@
+{
+  "model": "/data/msz/models/expert_reg_v1",
+  "data": "/data/msz/opd_project/data/semantic_nav_goal_eval_v1/semantic_nav_goal_reg_eval_v1.jsonl",
+  "num_samples": 144,
+  "format_ok": 144,
+  "format_rate": 1.0,
+  "mean_iou": 0.2368191309688964,
+  "iou_at_0_3": 0.3472222222222222,
+  "iou_at_0_5": 0.1736111111111111,
+  "mean_center_error": 96.03373177959227,
+  "mean_coord_mae": 61.828125,
+  "results_path": "/data/msz/point/outputs/eval_domain_four_models_v1_20260520_152926/reg_expert__latest_region.jsonl"
+}

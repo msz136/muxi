@@ -1,7 +1,6 @@
 # AGENTS.md — /data/msz (muxi/sft)
 
 MACA C500 8-GPU vision-language SFT training for Qwen3-VL-8B-Instruct grounding model.
-
 ## Directory map
 
 | Dir | Purpose |
@@ -17,6 +16,8 @@ MACA C500 8-GPU vision-language SFT training for Qwen3-VL-8B-Instruct grounding 
 | `point/bad/` | Bad-sample batch logs (gitignored) |
 | `point/logs/` | Training run logs (gitignored by default) |
 | `point/configs/` | DeepSpeed ZeRO-2 config |
+| `opd_project/` | OPD/multi-teacher experiments and semantic-nav box-grounding data |
+| `opd_project/data/semantic_nav_box_v1/` | Generated semantic navigation `<box>` grounding datasets |
 
 ## Entry points
 
@@ -24,6 +25,8 @@ MACA C500 8-GPU vision-language SFT training for Qwen3-VL-8B-Instruct grounding 
 - **Data prep**: `point/point_data_only.py` — converts raw datasets to unified `<point>` JSONL
 - **Mix builder**: `point/build_mixes.py` — oversampling ratios for grounding data
 - **Chunked training**: `point/run_chunked_sft.sh` — 15K-row chunks, 1 epoch each, sequential weight carry-forward
+- **Semantic-nav box data**: `opd_project/scripts/build_semantic_nav_box_grounding.py` — builds RoboPoint point→box manifests
+- **Remote crop labeling**: `opd_project/scripts/local_label_semantic_nav_remote_base64.py` — labels boxes with Qwen-122B without storing source images locally
 
 ## Environment (MACA platform)
 
@@ -75,6 +78,80 @@ JSONL, one dict per line:
 ```
 
 Image paths: absolute or relative to dataset root. Missing images → collator skips sample.
+
+### Semantic navigation box-grounding format
+
+For semantic navigation, the target is a rectangle, not a point. The model is
+given target object information (`object_name`, `relation`, `anchor_object`) and
+must return only a `<box>` tag with normalized 0-1000 coordinates:
+
+```json
+{"dataset":"semantic_nav_box_grounding_full_object_ref_v1",
+ "image":["/data/msz/dataset/RoboPoint/images/object_ref/example.png"],
+ "video":[],
+ "target":{
+   "object_name":"white rectangular object",
+   "relation":"in front of the highlighted object",
+   "anchor_object":"highlighted object",
+   "attributes":["white","rectangular","standing"],
+   "box":[[257,659],[437,929]]
+ },
+ "conversations":[
+   {"from":"system","value":"You are a semantic navigation grounding assistant..."},
+   {"from":"human","value":"<image>\nTarget object information:\n{\"object_name\":\"white rectangular object\",\"relation\":\"in front of the highlighted object\",\"anchor_object\":\"highlighted object\"}\nReturn only the bounding box as <box>[[x1,y1],[x2,y2]]</box>."},
+   {"from":"gpt","value":"<box>[[257,659],[437,929]]</box>"}
+ ],
+ "metadata":{"task_type":"box_grounding","prompt_mode":"obj_relation"}}
+```
+
+The generated training set also includes `obj_only` and `relation_only` prompt
+variants for the same box.
+
+## Semantic-nav box-grounding data (May 2026)
+
+**Goal**: train the model for scenes where the input is an image plus target
+object information such as `{object_name, relation, anchor_object}`, and the
+output is the corresponding rectangular target region.
+
+**Generation source**: RoboPoint `object_ref` samples from
+`/data/msz/opd_project/data/prompt_pool_clean.jsonl`.
+
+**Conversion**:
+1. Keep `robopoint` rows with `object_ref`, relation in
+   `on,left,right,inside,beside,front,behind,between`, and enough `gt_points`.
+2. Convert each point cloud to a box using min/max x/y plus margin.
+3. Crop the synthesized box in memory.
+4. Ask Qwen-122B to label the cropped target region with `object_name`,
+   `attributes`, `region_type`, and `confidence`.
+5. Expand each accepted base row into three prompts: `obj_only`,
+   `relation_only`, and `obj_relation`.
+
+**Important**: source images are not downloaded to local disk for full labeling.
+The final full run used a temporary read-only HTTP server on the remote machine
+plus an SSH tunnel; images were read into memory, cropped with PIL, and only the
+small crop was sent to Qwen-122B as base64. The temporary HTTP server and tunnel
+were closed after generation.
+
+**Final full object-ref dataset**:
+
+| File | Rows | Notes |
+|------|-----:|-------|
+| `/data/msz/opd_project/data/semantic_nav_box_v1/semantic_nav_box_grounding_full_object_ref_v1_high_quality.jsonl` | 41,637 | Recommended training file |
+| `/data/msz/opd_project/data/semantic_nav_box_v1/semantic_nav_box_grounding_full_object_ref_v1_all.jsonl` | 41,655 | Includes 6 weak base labels expanded to 18 rows |
+| `/data/msz/opd_project/data/semantic_nav_box_v1/semantic_nav_box_grounding_full_object_ref_v1_base_annotations.jsonl` | 13,885 | One Qwen-122B label per base box |
+| `/data/msz/opd_project/data/semantic_nav_box_v1/semantic_nav_box_grounding_full_object_ref_v1_summary.json` | 1 | Dataset statistics |
+| `/data/msz/opd_project/data/semantic_nav_box_v1/semantic_nav_box_grounding_full_object_ref_v1_preview.png` | 1 | Visual QA sheet |
+
+Summary:
+- Base boxes: 13,885
+- High-quality base boxes: 13,879
+- Train rows: 41,655 total / 41,637 high-quality
+- Region types: `object=11537`, `surface=1250`, `container=968`,
+  `free_space=125`, `unclear=5`
+- Relations: `on=5634`, `beside=2303`, `inside=1377`, `left=1257`,
+  `right=1241`, `behind=1020`, `front=943`, `between=110`
+
+Use the high-quality file first unless explicitly auditing weak labels.
 
 ## Training parameters
 

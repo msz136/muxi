@@ -1,0 +1,13 @@
+{
+  "model": "/data/msz/models/expert_reg_v1",
+  "data": "/data/msz/opd_project/data/semantic_nav_box_v1/eval/semantic_nav_box_heldout_object_ref_eval_v1.jsonl",
+  "num_samples": 1251,
+  "format_ok": 1251,
+  "format_rate": 1.0,
+  "mean_iou": 0.10421617259220677,
+  "iou_at_0_3": 0.11031175059952038,
+  "iou_at_0_5": 0.03117505995203837,
+  "mean_center_error": 163.96655315912176,
+  "mean_coord_mae": 108.93225419664269,
+  "results_path": "/data/msz/point/outputs/eval_domain_four_models_v1_20260520_152926/reg_expert__latest_object.jsonl"
+}

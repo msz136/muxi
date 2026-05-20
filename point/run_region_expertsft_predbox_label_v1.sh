@@ -2,17 +2,18 @@
 set -euo pipefail
 
 ROOT=/data/msz/point
-DATA_PATH=/data/msz/opd_project/data/semantic_nav_box_v1/semantic_nav_box_grounding_full_object_ref_v1_high_quality.jsonl
+DATA_PATH=/data/msz/opd_project/data/semantic_nav_region_box_v1/predbox_label_v1/semantic_nav_region_predbox_label_v1_high_quality_no_eval_holdout.jsonl
 MODEL=/data/msz/models/Qwen3-VL-8B-Instruct
 DS_CONFIG=${ROOT}/configs/zero2.json
 LOG_DIR=${ROOT}/logs
-RUN_ID=expertsft_semantic_nav_final_$(date +%Y%m%d_%H%M%S)
+RUN_ID=region_expertsft_predbox_label_v1_final_$(date +%Y%m%d_%H%M%S)
 OUT_DIR=${ROOT}/outputs/${RUN_ID}
 LOG_FILE=${LOG_DIR}/${RUN_ID}.log
 
 NUM_GPUS=8
-PER_DEVICE_BS=8
+PER_DEVICE_BS=1
 GRAD_ACC=4
+LEARNING_RATE=${LEARNING_RATE:-5e-6}
 
 mkdir -p "${LOG_DIR}" "${OUT_DIR}" "${ROOT}/bad"
 exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -40,17 +41,18 @@ ROWS=$(wc -l < "${DATA_PATH}")
 EFFECTIVE_BS=$((NUM_GPUS * PER_DEVICE_BS * GRAD_ACC))
 EXPECTED_STEPS=$(((ROWS + EFFECTIVE_BS - 1) / EFFECTIVE_BS))
 
-echo "[expertsft] start=$(date)"
-echo "[expertsft] data=${DATA_PATH}"
-echo "[expertsft] model=${MODEL}"
-echo "[expertsft] output=${OUT_DIR}"
-echo "[expertsft] log=${LOG_FILE}"
-echo "[expertsft] rows=${ROWS}"
-echo "[expertsft] per_device_batch_size=${PER_DEVICE_BS}"
-echo "[expertsft] gradient_accumulation_steps=${GRAD_ACC}"
-echo "[expertsft] effective_batch_size=${EFFECTIVE_BS}"
-echo "[expertsft] expected_steps=${EXPECTED_STEPS}"
-echo "[expertsft] save_policy=final_model_only_no_intermediate_checkpoints"
+echo "[region-expertsft-predbox] start=$(date)"
+echo "[region-expertsft-predbox] data=${DATA_PATH}"
+echo "[region-expertsft-predbox] model=${MODEL}"
+echo "[region-expertsft-predbox] output=${OUT_DIR}"
+echo "[region-expertsft-predbox] log=${LOG_FILE}"
+echo "[region-expertsft-predbox] rows=${ROWS}"
+echo "[region-expertsft-predbox] per_device_batch_size=${PER_DEVICE_BS}"
+echo "[region-expertsft-predbox] gradient_accumulation_steps=${GRAD_ACC}"
+echo "[region-expertsft-predbox] learning_rate=${LEARNING_RATE}"
+echo "[region-expertsft-predbox] effective_batch_size=${EFFECTIVE_BS}"
+echo "[region-expertsft-predbox] expected_steps=${EXPECTED_STEPS}"
+echo "[region-expertsft-predbox] save_policy=final_model_only_no_intermediate_checkpoints"
 mx-smi || true
 
 deepspeed --num_gpus="${NUM_GPUS}" "${ROOT}/expert_sft.py" train \
@@ -61,7 +63,7 @@ deepspeed --num_gpus="${NUM_GPUS}" "${ROOT}/expert_sft.py" train \
   --num-train-epochs 1 \
   --per-device-train-batch-size "${PER_DEVICE_BS}" \
   --gradient-accumulation-steps "${GRAD_ACC}" \
-  --learning-rate 5e-6 \
+  --learning-rate "${LEARNING_RATE}" \
   --model-max-length 16384 \
   --min-pixels 50176 \
   --max-pixels 50176 \
@@ -77,5 +79,5 @@ deepspeed --num_gpus="${NUM_GPUS}" "${ROOT}/expert_sft.py" train \
   --bf16 \
   --gradient-checkpointing
 
-echo "[expertsft] done=$(date)"
-echo "[expertsft] output=${OUT_DIR}"
+echo "[region-expertsft-predbox] done=$(date)"
+echo "[region-expertsft-predbox] output=${OUT_DIR}"

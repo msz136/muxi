@@ -544,6 +544,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-points-per-target", type=int, default=8)
     parser.add_argument("--max-shard-size", default="4GB")
     parser.add_argument("--save-trainable-copy", action="store_true")
+    parser.add_argument("--gradient-checkpointing", action="store_true")
     return parser.parse_args()
 
 
@@ -575,6 +576,13 @@ def main() -> None:
 
     processor = AutoProcessor.from_pretrained(args.student, trust_remote_code=True)
     student = load_vl_model(args.student, args.student_device, train=True)
+    if args.gradient_checkpointing:
+        student.config.use_cache = False
+        if hasattr(student, "gradient_checkpointing_enable"):
+            student.gradient_checkpointing_enable()
+        if hasattr(student, "enable_input_require_grads"):
+            student.enable_input_require_grads()
+        log("[model] gradient_checkpointing=enabled")
     teacher3 = load_vl_model(args.teacher3, args.teacher3_device, train=False)
     teacher4 = load_vl_model(args.teacher4, args.teacher4_device, train=False)
     trainable = configure_trainable(student, args.train_scope)
