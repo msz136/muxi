@@ -199,6 +199,136 @@ class AbortOnNonFiniteLog(TrainerCallback):
                 raise FloatingPointError(f"non-finite metric at step {state.global_step}: {key}={value}")
 
 
+# Disabled OOM-skip experiment kept here for reference. The active path below
+# intentionally uses the stock transformers.Trainer.
+#
+# import torch.distributed as dist
+# from accelerate.utils import DistributedType
+# from torch.utils.data import SequentialSampler
+#
+#
+# def _is_oom_exception(exc: BaseException) -> bool:
+#     if isinstance(exc, torch.OutOfMemoryError):
+#         return True
+#     text = str(exc).lower()
+#     return (
+#         "out of memory" in text
+#         or "cublas_status_alloc_failed" in text
+#         or "cuda error: out of memory" in text
+#     )
+#
+#
+# def _empty_cuda_cache() -> None:
+#     if torch.cuda.is_available():
+#         torch.cuda.empty_cache()
+#
+#
+# class OomSkipTrainer(Trainer):
+#     """Trainer with the narrowest possible OOM-only skip path."""
+#
+#     def _get_train_sampler(self, *args, **kwargs):  # type: ignore[override]
+#         if getattr(self.args, "sequential_sampling", False):
+#             train_dataset = args[0] if args else kwargs.get("train_dataset", self.train_dataset)
+#             return SequentialSampler(train_dataset)
+#         return super()._get_train_sampler(*args, **kwargs)
+#
+#     def _sync_oom_flag(self, local_oom: bool) -> bool:
+#         if not (dist.is_available() and dist.is_initialized()):
+#             return local_oom
+#         device = self.args.device
+#         flag = torch.tensor([1 if local_oom else 0], device=device, dtype=torch.int32)
+#         dist.all_reduce(flag, op=dist.ReduceOp.MAX)
+#         return bool(flag.item())
+#
+#     def _clear_pending_grads(self, model: torch.nn.Module) -> None:
+#         seen: set[int] = set()
+#         for obj in (model, self.model_wrapped, self.optimizer):
+#             if obj is None or id(obj) in seen or not hasattr(obj, "zero_grad"):
+#                 continue
+#             seen.add(id(obj))
+#             try:
+#                 obj.zero_grad(set_to_none=True)
+#             except TypeError:
+#                 obj.zero_grad()
+#
+#     def training_step(self, model, inputs, num_items_in_batch=None):  # type: ignore[override]
+#         cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
+#
+#         with cp_context():
+#             model.train()
+#             if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
+#                 self.optimizer.train()
+#
+#             local_oom = False
+#             loss = None
+#             try:
+#                 inputs = self._prepare_inputs(inputs)
+#                 with self.compute_loss_context_manager():
+#                     loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+#             except Exception as exc:
+#                 if not _is_oom_exception(exc):
+#                     raise
+#                 local_oom = True
+#                 _empty_cuda_cache()
+#                 log(f"[oom_skip] local prepare/forward OOM at global_step={self.state.global_step}: {exc}")
+#             finally:
+#                 del inputs
+#
+#             any_oom = self._sync_oom_flag(local_oom)
+#             if any_oom:
+#                 _empty_cuda_cache()
+#                 self._clear_pending_grads(model)
+#                 if is_rank0():
+#                     count = getattr(self, "oom_skip_count", 0) + 1
+#                     setattr(self, "oom_skip_count", count)
+#                     log(f"[oom_skip] skipped batch at global_step={self.state.global_step}; total_oom_skips={count}")
+#                 return torch.zeros((), device=self.args.device)
+#
+#             if (
+#                 self.args.torch_empty_cache_steps is not None
+#                 and self.state.global_step % self.args.torch_empty_cache_steps == 0
+#             ):
+#                 _empty_cuda_cache()
+#
+#             kwargs = {}
+#             if self.args.n_gpu > 1:
+#                 loss = loss.mean()
+#
+#             local_oom = False
+#             try:
+#                 if self.use_apex:
+#                     from apex import amp
+#
+#                     with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+#                         scaled_loss.backward()
+#                 else:
+#                     if (
+#                         not self.model_accepts_loss_kwargs or num_items_in_batch is None
+#                     ) and self.compute_loss_func is None:
+#                         loss = loss / self.current_gradient_accumulation_steps
+#                     if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+#                         kwargs["scale_wrt_gas"] = False
+#                     self.accelerator.backward(loss, **kwargs)
+#             except Exception as exc:
+#                 if not _is_oom_exception(exc):
+#                     raise
+#                 local_oom = True
+#                 _empty_cuda_cache()
+#                 log(f"[oom_skip] local backward OOM at global_step={self.state.global_step}: {exc}")
+#
+#             any_oom = self._sync_oom_flag(local_oom)
+#             if any_oom:
+#                 _empty_cuda_cache()
+#                 self._clear_pending_grads(model)
+#                 if is_rank0():
+#                     count = getattr(self, "oom_skip_count", 0) + 1
+#                     setattr(self, "oom_skip_count", count)
+#                     log(f"[oom_skip] skipped batch at global_step={self.state.global_step}; total_oom_skips={count}")
+#                 return torch.zeros((), device=self.args.device)
+#
+#             return loss.detach()
+#
+#
 def get_model_cls():
     for name in ("AutoModelForImageTextToText", "AutoModelForVision2Seq", "Qwen3VLForConditionalGeneration"):
         cls = getattr(transformers, name, None)
@@ -338,6 +468,7 @@ def save_final_model(trainer: Trainer, processor: Any, args: argparse.Namespace)
                 "gradient_accumulation_steps": args.gradient_accumulation_steps,
                 "learning_rate": args.learning_rate,
                 "save_policy": "final_model_only_no_intermediate_checkpoints",
+                "sequential_sampling": bool(args.sequential_sampling),
                 "transformers_version": transformers.__version__,
             },
             f,
@@ -371,6 +502,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--optim", default="adamw_torch")
     parser.add_argument("--max-shard-size", "--max_shard_size", dest="max_shard_size", default="4GB")
     parser.add_argument("--limit-samples", "--limit_samples", dest="limit_samples", type=int, default=None)
+    parser.add_argument("--sequential-sampling", "--sequential_sampling", dest="sequential_sampling", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--bf16", action="store_true")
     parser.add_argument("--gradient-checkpointing", "--gradient_checkpointing", dest="gradient_checkpointing", action="store_true")
@@ -422,9 +554,14 @@ def train(args: argparse.Namespace) -> None:
     log(f"[train] samples={len(dataset)} world_size={world_size} effective_batch={effective_bs} expected_steps={expected_steps}")
     log("[train] save_strategy=no; final model will be saved after trainer.train()")
 
+    training_args = build_training_args(args)
+    setattr(training_args, "sequential_sampling", bool(args.sequential_sampling))
+    if args.sequential_sampling:
+        log("[train] sequential_sampling=true")
+
     trainer = Trainer(
         model=model,
-        args=build_training_args(args),
+        args=training_args,
         train_dataset=dataset,
         data_collator=collator,
         processing_class=processor,

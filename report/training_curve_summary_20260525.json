@@ -1,0 +1,137 @@
+{
+  "generated_at_local": "2026-05-25T02:36:40.721Z",
+  "opd": {
+    "rows": 2344,
+    "first": {
+      "loss": 4.5744,
+      "grad_norm": 696.7597875573288,
+      "learning_rate": 0,
+      "opd_route_id": 2,
+      "opd_response_tokens": 48,
+      "opd_loss": 2.977684736251831,
+      "entropy": 1.2759050130844116,
+      "opd_entropy": 1.2759050130844116,
+      "epoch": 0,
+      "step": 1
+    },
+    "last": {
+      "loss": 0.1846,
+      "grad_norm": 2.842887765948197,
+      "learning_rate": 4.775741522800025e-13,
+      "opd_route_id": 4,
+      "opd_response_tokens": 25,
+      "opd_loss": 0.16669046878814697,
+      "entropy": 0.17483912408351898,
+      "opd_entropy": 0.17483912408351898,
+      "epoch": 1,
+      "step": 2344
+    },
+    "loss_min": 0.0679,
+    "loss_max": 5.6432,
+    "loss_last_ma50": 0.24799800000000044,
+    "opd_loss_last_ma50": 0.2402452523773536,
+    "entropy_last_ma50": 0.24854992963373662
+  },
+  "experts": {
+    "general_reasoning_expert": {
+      "rows": 3125,
+      "first": {
+        "loss": 5.196,
+        "grad_norm": 144.14837646484375,
+        "learning_rate": 0,
+        "epoch": 0,
+        "step": 1
+      },
+      "last": {
+        "loss": 0.2699,
+        "grad_norm": 2.0505833625793457,
+        "learning_rate": 1.3428819820027194e-12,
+        "epoch": 1,
+        "step": 3125
+      },
+      "loss_last_ma50": 0.23720599999999956,
+      "loss_min": 0.0693,
+      "loss_max": 6.5971
+    },
+    "region_expert": {
+      "rows": 3125,
+      "first": {
+        "loss": 1.6029,
+        "grad_norm": 53.410675048828125,
+        "learning_rate": 0,
+        "epoch": 0,
+        "step": 1
+      },
+      "last": {
+        "loss": 0.6987,
+        "grad_norm": 2.1247410774230957,
+        "learning_rate": 1.3428819820027194e-12,
+        "epoch": 1,
+        "step": 3125
+      },
+      "loss_last_ma50": 0.7329120000000005,
+      "loss_min": 0.6179,
+      "loss_max": 1.6029
+    },
+    "robopoint_expert": {
+      "rows": 3125,
+      "first": {
+        "loss": 2.5643,
+        "grad_norm": 43.22000503540039,
+        "learning_rate": 0,
+        "epoch": 0,
+        "step": 1
+      },
+      "last": {
+        "loss": 0.7267,
+        "grad_norm": 1.71439790725708,
+        "learning_rate": 1.3428819820027194e-12,
+        "epoch": 1,
+        "step": 3125
+      },
+      "loss_last_ma50": 0.7247080000000004,
+      "loss_min": 0.5497,
+      "loss_max": 3.5471
+    },
+    "spatial_rel_expert": {
+      "rows": 3125,
+      "first": {
+        "loss": 1.3992,
+        "grad_norm": 69.43944549560547,
+        "learning_rate": 0,
+        "epoch": 0,
+        "step": 1
+      },
+      "last": {
+        "loss": 0.6992,
+        "grad_norm": 2.127751588821411,
+        "learning_rate": 1.3428819820027194e-12,
+        "epoch": 1,
+        "step": 3125
+      },
+      "loss_last_ma50": 0.7053140000000012,
+      "loss_min": 0.6055,
+      "loss_max": 1.5657
+    },
+    "general_obj_expert": {
+      "rows": 3125,
+      "first": {
+        "loss": 1.4039,
+        "grad_norm": 49.4843864440918,
+        "learning_rate": 0,
+        "epoch": 0,
+        "step": 1
+      },
+      "last": {
+        "loss": 0.7324,
+        "grad_norm": 2.965660810470581,
+        "learning_rate": 1.3428819820027194e-12,
+        "epoch": 1,
+        "step": 3125
+      },
+      "loss_last_ma50": 0.6729040000000002,
+      "loss_min": 0.5145,
+      "loss_max": 1.9565
+    }
+  }
+}

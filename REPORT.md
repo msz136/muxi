@@ -1154,3 +1154,2045 @@ region bucket 内部来源：
 - 四模型通用 200 条 eval 完成；
 - 所有详细输出已复制到本地 `report/`；
 - 远端无残留 `eval_semantic_nav_box`、`eval_general_vqa`、`train_opd`、`deepspeed` 进程。
+
+## 2026-05-21 数据构造日志：五个 Expert 与 OPD Student 融合数据
+
+本节接在 2026-05-20 的小规模 OPD v1 评估之后。前一版 OPD 只验证了多教师训练与评估链路，数据规模很小，不能代表最终 student 融合训练。2026-05-21 的主要工作转向正式数据工程：先构建五个领域 expert 的 seed0 数据，再基于这些 expert 数据构造约 100 万规模的 OPD student 融合数据，并完成 shuffle、异常筛查与严格清洗。
+
+### 设计目标
+
+最终目标不是再训练一个单域 expert，而是准备一个 student OPD 融合训练集。student 需要同时保留五类能力：
+
+1. 通用视觉/机器人推理；
+2. RoboPoint 点选 grounding；
+3. 通用 object-to-box grounding；
+4. region/description-to-box grounding；
+5. 空间关系 relation-to-box grounding。
+
+这样设计的原因是：单个 expert 在自己领域内表现更强，但 OPD student 需要在输入 prompt 暗示不同任务时选择合适能力和输出格式。如果直接混合所有数据而不标注 route、边界和冲突格式，student 容易学成平均模型：既损失 object expert 的精度，也损失 region expert 的精度，还可能在 point/box/text 格式之间摇摆。
+
+因此这次数据设计把训练目标拆成三层：
+
+- expert 数据层：每个 expert 先有自己的稳定领域数据；
+- OPD route 层：每条 student 样本带 `target_expert`、`candidate_experts`、`expected_format`；
+- 边界与冲突层：专门训练 student 在相近任务和格式诱导下不要走错 route。
+
+### 公版数据来源快照
+
+这一轮明确不再使用旧的语义导航合成数据作为主训练来源，OPD student 只从当前清洗后的公版/公开池 expert mix 中抽样。这样做的原因是：之前合成 region/semantic-nav 数据质量不稳定，且部分 label 无法唯一对应期望 box；本轮目标是先用更可追溯、更稳定的公版 grounding/VQA 池构造五个 expert 与 OPD student。
+
+构造脚本中使用的 source label 与清洗文件如下：
+
+| source label | clean file | 公版/公开数据含义 | 在本轮中的角色 |
+|---|---|---|---|
+| `refcoco` | `refcoco_clean_v1.jsonl` | RefCOCO / RefCOCO+ / RefCOCOg referring expression grounding | object-to-box、region/general support |
+| `flickr30k` | `flickr30k_entities_clean_v1.jsonl` | Flickr30k Entities 短语 grounding | object/region phrase-to-box |
+| `vg_object` | `visual_genome_object_clean_v1.jsonl` | Visual Genome object boxes | 通用 object box |
+| `vg_region` | `visual_genome_region_clean_v1.jsonl` | Visual Genome region descriptions | region/description-to-box |
+| `vg_relationship` | `visual_genome_relationship_clean_v1.jsonl` | Visual Genome relationship annotations | relation grounding 与边界样本 |
+| `vg_relationship_balanced` | same as `vg_relationship` | 对 Visual Genome relationship 按关系 bucket 重采样后的训练源 | spatial relation expert 主源 |
+| `keepalive` | `keepalive_vqa_clean_v1_mediaok.jsonl` | Robo2VLM-1 VQA/机器人推理 keepalive | 防止模型只会输出坐标 |
+| `robopoint` | `grounding_point_clean_v1_mediaok.jsonl` | RoboPoint point grounding | point expert 主源与 point/box 边界 |
+
+远端 clean pool 行数快照如下。这里记录的是 2026-05-21 当时 `/data/msz/point/data_grounding_clean_v1` 下可见的行数；后续远端如果刷新，以本表作为本轮数据构造的本地证据。
+
+| clean file | rows |
+|---|---:|
+| `refcoco_clean_v1.jsonl` | 376,357 |
+| `flickr30k_entities_clean_v1.jsonl` | 415,951 |
+| `visual_genome_object_clean_v1.jsonl` | 2,357,546 |
+| `visual_genome_region_clean_v1.jsonl` | 5,282,274 |
+| `visual_genome_relationship_clean_v1.jsonl` | 1,622,341 |
+| `grounding_point_clean_v1_mediaok.jsonl` | 837,981 |
+| `keepalive_vqa_clean_v1_mediaok.jsonl` | 678,034 |
+| `semantic_nav_box_clean_v1.jsonl` | 41,637 |
+
+其中几个聚合文件的内部数据集拆分如下：
+
+| clean file | internal dataset/source distribution |
+|---|---|
+| `refcoco_clean_v1.jsonl` | `refcoco=141383`, `refcocoplus=140740`, `refcocog=94234` |
+| `keepalive_vqa_clean_v1_mediaok.jsonl` | `robo2vlm-1=678034` |
+| `grounding_point_clean_v1_mediaok.jsonl` | `robopoint=837981` |
+| `flickr30k_entities_clean_v1.jsonl` | `flickr30k_entities=415951` |
+| `visual_genome_object_clean_v1.jsonl` | `visual_genome_objects=2357546` |
+| `visual_genome_region_clean_v1.jsonl` | `visual_genome_regions=5282274` |
+| `visual_genome_relationship_clean_v1.jsonl` | `visual_genome_relationships=1622341` |
+
+注意：`semantic_nav_box_clean_v1.jsonl` 当时在 clean dir 中存在，但本轮五个 expert mix 脚本没有把它列入 `SOURCE_FILES`，因此没有进入这批五 expert / OPD student 主数据。它属于之前语义导航 box 合成路线的产物，保留给单独审计或特定 semantic-nav 实验。
+
+本轮明确排除的来源：
+
+- old synthetic semantic-nav/region data；
+- PhraseCut；
+- Talk2Car image version；
+- RoboRefIt。
+
+排除原因：
+
+- 旧 synthetic semantic-nav/region 数据在 label 唯一性、关系理解和 box 还原上不够稳定；
+- PhraseCut、Talk2Car 图片版、RoboRefIt 当时不是当前 clean media-ok 主池的一部分，或存在少量异常/认证/媒体可用性问题；
+- 本轮先保证 5 个 expert 与 OPD student 的公版池来源稳定、可复现、可清洗。
+
+### 五个 Expert 领域设计
+
+五个 expert 的数据均在远端 `/data/msz/point` 下生成，seed 为 `0`。
+
+训练文件目录：
+
+```text
+/data/msz/point/data_expert_seed0_v1_shuffled/<expert>/train_shuffled_seed20260520.jsonl
+```
+
+评估文件目录：
+
+```text
+/data/msz/point/data_expert_seed0_v1/<expert>/eval.jsonl
+```
+
+五个 expert 分工如下：
+
+| expert | 目标能力 | 设计原因 |
+|---|---|---|
+| `general_reasoning_expert` | 通用 VQA、机器人常识、非坐标回答 | 防止 grounding 训练把模型压成只会输出坐标；OPD student 仍需要普通问答和推理能力。 |
+| `robopoint_expert` | `<point>` 点选 grounding | RoboPoint 负责 point 输出能力，是 point/box 边界学习的基础。 |
+| `general_obj_expert` | 通用 object-to-box | 覆盖 RefCOCO/Flickr/VG object 这类物体框选，负责“物体名称 -> box”。 |
+| `region_expert` | description/region-to-box | 覆盖区域描述、短语区域、VG region 等，负责“区域语义描述 -> box”。 |
+| `spatial_rel_expert` | relation-aware box | 覆盖 left/right/front/behind/inside/on/near 等关系表达，负责“物体 + 关系 + anchor -> box”。 |
+
+每个 expert 的总体策略是“领域为主，少量其它能力保活”。这对应之前讨论的 80% 领域数据加其它混合策略：expert 要足够专，但不能完全忘掉输入格式、图像解析和通用回答风格。后续 OPD student 再通过 route metadata 学会在多个 expert 能力之间切换。
+
+设计配额来自 `build_expert_mixes_seed0_v2.py` 的 `EXPERT_TRAIN_PLAN`。原始目标是每个 expert `800,000` train / `20,000` eval，清洗后 train 会略低于目标，因为超长/异常样本被删除。
+
+| expert | 主领域源 | 其它混合源 |
+|---|---|---|
+| `general_reasoning_expert` | `keepalive=640k` | `refcoco=40k`, `vg_region=40k`, `vg_object=30k`, `vg_relationship=20k`, `robopoint=30k` |
+| `robopoint_expert` | `robopoint=640k` | `keepalive=80k`, `vg_object=30k`, `refcoco=20k`, `vg_region=20k`, `vg_relationship=10k` |
+| `general_obj_expert` | `refcoco=200k`, `flickr30k=180k`, `vg_object=220k` | `vg_region=80k`, `vg_relationship=60k`, `keepalive=40k`, `robopoint=20k` |
+| `region_expert` | `vg_region=640k` | `refcoco=40k`, `flickr30k=40k`, `vg_object=30k`, `vg_relationship=30k`, `keepalive=10k`, `robopoint=10k` |
+| `spatial_rel_expert` | `vg_relationship_balanced=640k` | `vg_region=50k`, `vg_object=40k`, `refcoco=30k`, `flickr30k=20k`, `keepalive=10k`, `robopoint=10k` |
+
+`vg_relationship_balanced` 不是新数据集，而是对 Visual Genome relationship 做关系类别平衡采样。关系 bucket 目标权重：
+
+| bucket | weight |
+|---|---:|
+| `on` | 0.18 |
+| `in_inside` | 0.18 |
+| `near_next_beside` | 0.14 |
+| `under_below` | 0.10 |
+| `above_over` | 0.10 |
+| `front` | 0.08 |
+| `behind` | 0.08 |
+| `left_right` | 0.06 |
+| `between` | 0.04 |
+| `other_spatial` | 0.04 |
+
+这样设计 spatial relation expert 的原因是：原始关系数据很容易被高频 `on/in/near` 主导，而用户关心的语义导航关系还包括 `front/behind/between/left/right` 等低频关系。平衡采样能让这些关系在 expert 训练中有足够曝光。
+
+清洗后最终 shuffled train 的真实 source 分布如下：
+
+| expert | rows | source distribution |
+|---|---:|---|
+| `general_reasoning_expert` | 798,384 | `keepalive=639981`, `refcoco=40000`, `vg_region=39561`, `robopoint=29613`, `vg_object=29541`, `vg_relationship=19688` |
+| `robopoint_expert` | 791,254 | `robopoint=631762`, `keepalive=79998`, `vg_object=29784`, `refcoco=20000`, `vg_region=19821`, `vg_relationship=9889` |
+| `general_obj_expert` | 787,128 | `vg_object=213686`, `refcoco=200000`, `flickr30k=180000`, `vg_region=76631`, `vg_relationship=57072`, `keepalive=40000`, `robopoint=19739` |
+| `region_expert` | 788,566 | `vg_region=631977`, `flickr30k=40000`, `refcoco=40000`, `vg_object=28396`, `vg_relationship=28329`, `keepalive=9999`, `robopoint=9865` |
+| `spatial_rel_expert` | 782,803 | `vg_relationship_balanced=627276`, `vg_region=47729`, `vg_object=37942`, `refcoco=30000`, `flickr30k=20000`, `keepalive=10000`, `robopoint=9856` |
+
+Eval 每个 expert 固定为 20,000 行，且 train/eval image overlap 为 `0`：
+
+| expert | eval source distribution |
+|---|---|
+| `general_reasoning_expert` | `keepalive=16000`, `refcoco=1000`, `vg_region=1000`, `vg_object=750`, `robopoint=750`, `vg_relationship=500` |
+| `robopoint_expert` | `robopoint=16000`, `keepalive=2000`, `vg_object=750`, `refcoco=500`, `vg_region=500`, `vg_relationship=250` |
+| `general_obj_expert` | `vg_object=5500`, `refcoco=5000`, `flickr30k=4500`, `vg_region=2000`, `vg_relationship=1500`, `keepalive=1000`, `robopoint=500` |
+| `region_expert` | `vg_region=16000`, `refcoco=1000`, `flickr30k=1000`, `vg_object=750`, `vg_relationship=750`, `keepalive=250`, `robopoint=250` |
+| `spatial_rel_expert` | `vg_relationship_balanced=16000`, `vg_region=1250`, `vg_object=1000`, `refcoco=750`, `flickr30k=500`, `keepalive=250`, `robopoint=250` |
+
+### Expert 数据清洗
+
+在用户用每个领域前 100k 样本试训练时出现 OOM 风险后，先对样本体量做了统计，重点检查：
+
+- 文本总长度；
+- GPT answer 长度；
+- point 数量；
+- 图片尺寸；
+- shuffle 后前 100k 的真实分布。
+
+最终决定直接在原始 shuffled expert train 文件上清洗，因为试训练和后续 OPD 都基于这些 shuffled 文件，另存副本会增加混乱。
+
+Point 样本清洗规则：
+
+```text
+drop if:
+  point_count > 50
+  OR gpt_chars > 500
+  OR total_text_chars > 900
+```
+
+非 point 样本清洗规则：
+
+```text
+drop if:
+  total_text_chars > 900
+```
+
+为什么这样清洗：
+
+- `point_count > 50` 会显著拉长 answer，并且 point grounding 太密时对训练目标不稳定；
+- `gpt_chars > 500` 通常意味着坐标列表过长或回答不符合短格式目标；
+- `total_text_chars > 900` 是为了避免 collator/tokenizer 和视觉 token 叠加后形成长尾 batch，引发 OOM；
+- 非 point 虽然没有 point 数问题，但超长 prompt/answer 仍会拖慢训练并造成 batch 长尾。
+
+清洗后五个 shuffled train 文件行数：
+
+| expert | rows after filtering |
+|---|---:|
+| `general_obj_expert` | 787,128 |
+| `general_reasoning_expert` | 798,384 |
+| `region_expert` | 788,566 |
+| `robopoint_expert` | 791,254 |
+| `spatial_rel_expert` | 782,803 |
+
+对应报告：
+
+```text
+/data/msz/point/data_expert_seed0_v1_shuffled/point_outlier_filter_report.json
+/data/msz/point/data_expert_seed0_v1_shuffled/point_outlier_filter_verify_after.json
+/data/msz/point/data_expert_seed0_v1_shuffled/non_point_text900_filter_report.json
+```
+
+最终验证：
+
+- point rule violations: `0`
+- non-point `total_text_chars > 900`: `0`
+- non-point `gpt_chars > 500`: `0`
+
+### Expert 训练数据与 OPD Seen 定义
+
+五个 expert 的试训练都使用各自 shuffled train 的前 `100,000` 条：
+
+```text
+LIMIT_SAMPLES=100000
+```
+
+因此 OPD student 数据中的 `seen_by_expert_100k` 定义为：
+
+```text
+first 100000 rows of each filtered shuffled expert train file
+```
+
+这样定义的原因是：OPD student 的 domain 数据需要明确区分 expert 已见 prompt 和未见同分布 prompt。student 融合时如果只看 expert 已见样本，会过拟合 expert 训练集；如果完全不看已见样本，又缺少对 expert 行为边界的稳定锚点。因此领域内部按 20/70/10 切分：
+
+- 20% expert seen prompt；
+- 70% unseen same-distribution prompt；
+- 10% hard prompt。
+
+### OPD Student 数据总体配比
+
+OPD student train 目标约 100 万行，配比如下：
+
+| category | target rows | ratio | 目的 |
+|---|---:|---:|---|
+| domain | 600,000 | 60% | 保留五个 expert 的主能力。 |
+| general | 250,000 | 25% | 保留通用问答和基础 grounding，不让 student 只学边界样本。 |
+| boundary | 100,000 | 10% | 专门训练相邻能力之间的 route 边界。 |
+| format_conflict | 50,000 | 5% | 强化输出格式、坐标规范、抗错误诱导。 |
+
+每个 expert 的 domain 配额为 120,000：
+
+| subtype | rows per expert | total rows | 设计原因 |
+|---|---:|---:|---|
+| `seen_100k` | 24,000 | 120,000 | 对齐 expert 已训练过的 prompt，稳定蒸馏行为。 |
+| `unseen_same_distribution` | 84,000 | 420,000 | 同分布未见样本，防止只记住 seen prompt。 |
+| `hard_static` | 12,000 | 60,000 | 静态困难样本，覆盖长文本、稀有关系、极端 box/point 等长尾。 |
+
+### Hard 样本设计
+
+Hard 样本不是在线从训练 loss 采样，而是在构造阶段用静态规则预选。这样做是因为当前目标是先生成稳定可复现的数据集，而不是引入依赖训练中间状态的动态数据管线。
+
+Hard scoring 主要考虑：
+
+- 文本接近阈值但未超限；
+- point 数量接近阈值但未超限；
+- box 面积极小或极大；
+- box 长宽比较大；
+- spatial relation 中出现 front/behind/between/under/above 等更难关系；
+- general reasoning 中较长的 keepalive 样本。
+
+为什么需要 hard：
+
+- 只训练普通样本会让 student 在长尾 prompt 上选择错误 expert；
+- hard 样本能提前暴露 route 混淆、格式漂移和坐标边界问题；
+- 10% 比例足够让模型看到困难边界，但不至于让训练集被离群样本主导。
+
+### Boundary 样本设计
+
+Boundary 数据是本轮 OPD 设计的核心之一。它不只是“难样本”，而是专门针对 expert 之间容易混淆的边界。
+
+训练配额：
+
+| subtype | rows | 设计目的 |
+|---|---:|---|
+| `obj_vs_region_object` | 10,000 | object prompt 应走 object expert，而不是 region expert。 |
+| `obj_vs_region_region` | 10,000 | region/description prompt 应走 region expert，而不是 object expert。 |
+| `obj_vs_spatial_relation` | 20,000 | 带 relation/anchor 的 object grounding 应走 spatial relation expert。 |
+| `region_vs_spatial_region_text` | 10,000 | 描述性 region 与 relation-aware region 的边界。 |
+| `region_vs_spatial_structured_relation` | 10,000 | 结构化关系 prompt 应走 spatial expert。 |
+| `point_vs_box_point` | 10,000 | point 输出不能被 box 任务污染。 |
+| `point_vs_box_box` | 10,000 | box 输出不能被 point 任务污染。 |
+| `reasoning_vs_grounding_reasoning` | 10,000 | 普通问答不应被强制输出坐标。 |
+| `reasoning_vs_grounding_point` | 5,000 | grounding prompt 中 point 格式边界。 |
+| `reasoning_vs_grounding_box` | 5,000 | grounding prompt 中 box 格式边界。 |
+
+为什么需要 boundary：
+
+- OPD student 不是简单多任务 SFT，它需要在多个 teacher/expert 行为之间做路由；
+- object、region、spatial relation 都输出 `<box>`，如果没有边界数据，student 很容易只学到“看到 box 就用同一种策略”；
+- point 和 box 都是坐标输出，但格式和目标粒度不同，需要显式防止互相污染；
+- reasoning 与 grounding 的边界能防止模型在普通问答里过度输出坐标。
+
+### General 样本设计
+
+General 数据共 250,000 行：
+
+| subtype | rows | source expert | 目的 |
+|---|---:|---|---|
+| `keepalive_vqa` | 170,000 | `general_reasoning_expert` | 保留通用回答能力。 |
+| `simple_object_grounding` | 30,000 | `general_obj_expert` | 保留普通 object box 能力。 |
+| `simple_region_grounding` | 20,000 | `region_expert` | 保留普通 region box 能力。 |
+| `simple_relation_grounding` | 15,000 | `spatial_rel_expert` | 保留基础 relation grounding。 |
+| `short_point_grounding` | 15,000 | `robopoint_expert` | 保留短 point grounding。 |
+
+为什么 general 占 25%：
+
+- 如果只用 domain + boundary，student 会过度关注路由边界，普通任务能力会变窄；
+- keepalive VQA 是防止 grounding 数据把模型推向“凡问必坐标”的缓冲层；
+- simple grounding 是各领域最常见、最低噪声的样本，帮助 student 形成稳定输出格式。
+
+### Format / Conflict 样本设计
+
+Format/conflict 数据共 50,000 行：
+
+| subtype | rows | 目的 |
+|---|---:|---|
+| `format_strong` | 15,000 | 强化只输出目标 XML tag，不带解释。 |
+| `wrong_format_induction` | 10,000 | prompt 里提到其它格式时仍坚持当前任务格式。 |
+| `prompt_injection` | 10,000 | 抵抗 prompt/image 中要求改变格式的诱导。 |
+| `coord_norm` | 10,000 | 强调坐标为 0-1000 normalized integer。 |
+| `short_hard_boundary` | 5,000 | 短提示下仍处理困难边界。 |
+
+为什么保留这 5%：
+
+- 前一版评估中 base strict format rate 很低，格式本身就是重要能力；
+- 多 expert 融合时最容易出现的错误不是完全不会回答，而是输出了错误 tag 或夹带解释；
+- 坐标归一化和 XML tag 是训练、评估、下游导航系统的接口契约，必须显式训练。
+
+### OPD Student 构造脚本与输出格式
+
+构造脚本：
+
+```text
+/data/msz/point/build_opd_student_v1.py
+```
+
+本地同步副本：
+
+```text
+build_opd_student_v1.py
+```
+
+构造方式：
+
+- 只读 JSONL；
+- 不加载模型；
+- 不触碰 GPU；
+- 使用 `CUDA_VISIBLE_DEVICES=`、`nice -n 19`、`ionice -c3` 低优先级运行；
+- 输出 train/eval prompt+gold 数据，而不是在线 teacher logits。
+
+每条 OPD row 保留原始 `conversations` 和 gold answer，并新增：
+
+```json
+{
+  "gold": "...",
+  "teacher_outputs": {},
+  "metadata": {
+    "opd": {
+      "dataset_version": "opd_student_v1",
+      "split": "train/eval",
+      "sample_category": "...",
+      "sample_subtype": "...",
+      "target_expert": "...",
+      "candidate_experts": ["..."],
+      "expected_format": "box/point/text",
+      "source_expert_file": "...",
+      "source_file": "...",
+      "source_line": 123,
+      "seen_by_expert_100k": true,
+      "hard_score": 0.0,
+      "route_reason": "...",
+      "fingerprint": "...",
+      "opd_seed": 0
+    }
+  }
+}
+```
+
+这样设计的原因：
+
+- `gold` 让 SFT/CE 路线可以直接使用；
+- `teacher_outputs` 预留给后续 OPD teacher logits 或 teacher answer，不阻断当前纯数据构造；
+- `target_expert` 和 `candidate_experts` 记录 route 监督；
+- `source_file/source_line` 让异常样本可以追溯回原 expert 数据；
+- `fingerprint` 用于去重和 train/eval 泄漏检测；
+- `seen_by_expert_100k` 用于区分 expert 已见与未见 prompt。
+
+### 第一次 OPD Student 构造与修正
+
+第一次构造完成后：
+
+```text
+/data/msz/point/opd_student_v1/train_prompts.jsonl  1,000,000 rows
+/data/msz/point/opd_student_v1/eval_prompts.jsonl      46,602 rows
+```
+
+但 summary 中出现少量 `point_filter_violation`：
+
+- train: 19
+- eval: 45
+
+定位结果：
+
+- 原始样本本身已经通过 point 清洗；
+- 问题来自 `format_conflict` transform；
+- 追加 “Do not include explanations / wrong format / prompt injection / coord norm” 等提示后，少量 point 样本的 `total_text_chars` 被推到 900 以上。
+
+修正：
+
+```python
+if transform_kind:
+    ...
+    out = apply_prompt(row, prompt)
+    if not valid_row(out):
+        continue
+```
+
+也就是在 prompt 变换后再次执行 `valid_row` 校验。这样保证最终写出的样本满足训练期长度约束，而不是只校验原始样本。
+
+修正版重新构造后：
+
+```text
+train_rows = 1,000,000
+eval_rows  = 46,599
+bad_json   = 0
+violations = {}
+```
+
+Eval 比目标略少，是因为严格排除了 train 图片重叠和 fingerprint 重叠后，spatial relation eval 的部分子类候选不足。这里没有用 train 污染补齐 eval，优先保持评估干净。
+
+### OPD Student 最终构造产物
+
+远端目录：
+
+```text
+/data/msz/point/opd_student_v1/
+```
+
+主要文件：
+
+```text
+train_prompts.jsonl
+eval_prompts.jsonl
+summary.json
+manifests/opd_student_v1_build_summary.json
+```
+
+修正版构造后的 train 配比：
+
+| category | rows |
+|---|---:|
+| domain | 600,000 |
+| general | 250,000 |
+| boundary | 100,000 |
+| format_conflict | 50,000 |
+
+Train target expert 分布：
+
+| target expert | rows |
+|---|---:|
+| `general_reasoning_expert` | 310,000 |
+| `general_obj_expert` | 180,000 |
+| `region_expert` | 175,000 |
+| `spatial_rel_expert` | 175,000 |
+| `robopoint_expert` | 160,000 |
+
+输出格式分布：
+
+| split | box | text | point |
+|---|---:|---:|---:|
+| train | 555,637 | 293,050 | 151,313 |
+| eval | 22,537 | 16,242 | 7,820 |
+
+### Shuffle 处理
+
+构造脚本的 `ShardedWriter` 会随机分 shard 再随机 merge shard，这只能算近似打散。检查前 50k 后发现：
+
+- train 前 50k category 比例接近全局；
+- 但最长连续同 category 达到 9,368 行；
+- 说明顺序仍有 shard/block 痕迹。
+
+因此新增外部 shuffle 脚本：
+
+```text
+/data/msz/point/shuffle_opd_student_v1.py
+```
+
+本地同步副本：
+
+```text
+shuffle_opd_student_v1.py
+```
+
+Shuffle 方法：
+
+1. 用 hash(seed + line) 将每行分配到 bucket；
+2. train 使用 256 个 bucket，eval 使用 64 个 bucket；
+3. 每个 bucket 内随机洗牌；
+4. bucket 顺序再随机合并；
+5. 行数一致后原子替换原文件；
+6. summary 中写入 shuffle metadata。
+
+运行策略仍为：
+
+```text
+CUDA_VISIBLE_DEVICES=
+ionice -c3
+nice -n 19
+```
+
+Shuffle 后验证：
+
+| split | rows | max same category run | max same subtype run |
+|---|---:|---:|---:|
+| train | 1,000,000 | 24 | 14 |
+| eval | 46,599 | 21 | 21 |
+
+Train 前 50k 分布：
+
+| category | rows |
+|---|---:|
+| domain | 29,923 |
+| general | 12,537 |
+| boundary | 5,088 |
+| format_conflict | 2,452 |
+
+### 全量异常审计
+
+新增审计脚本：
+
+```text
+/data/msz/point/audit_opd_student_v1.py
+```
+
+本地同步副本：
+
+```text
+audit_opd_student_v1.py
+```
+
+审计分两层：
+
+1. 全量 JSONL 结构与文本/坐标特征；
+2. 全量唯一图片路径存在性与图片 header 尺寸检查。
+
+审计指标包括：
+
+- JSON 是否可解析；
+- `conversations`、human turn、gpt turn、answer 是否存在；
+- image 是否存在且单图；
+- `total_chars`、`human_chars`、`gpt_chars` 分布；
+- point 数量；
+- point/box 坐标是否在 `[0, 1000]`；
+- box 是否退化、反向、过小、过大、长宽比异常；
+- metadata expected format 是否与 answer 一致；
+- fingerprint 重复；
+- train/eval fingerprint overlap；
+- train/eval image overlap；
+- 图片文件是否存在且可打开；
+- 图片尺寸、面积、长宽比分布。
+
+清洗前审计结果：
+
+```text
+train rows = 1,000,000
+eval rows  = 46,599
+bad_json   = 0
+```
+
+文本长度：
+
+| split | total max | gpt max | point max |
+|---|---:|---:|---:|
+| train | 900 | 500 | 49 |
+| eval | 900 | 496 | 48 |
+
+图片检查：
+
+| item | value |
+|---|---:|
+| unique images checked | 614,731 |
+| existing/openable image files | 614,731 |
+| max width | 1,280 |
+| max height | 1,280 |
+| max area | 1,638,400 |
+| max image aspect | 9.259 |
+
+未发现：
+
+- 缺图；
+- 坏图；
+- 超大图；
+- train/eval 图片重叠；
+- train/eval fingerprint 重叠；
+- point 数量超限；
+- 坐标越界；
+- JSON 解析错误；
+- mixed point/box answer；
+- metadata expected format mismatch。
+
+唯一软异常是 `box_aspect_gt_20`：
+
+| split | count |
+|---|---:|
+| train | 1,700 |
+| eval | 21 |
+
+抽样检查发现这类样本大多是 `pole`、`line`、`wave`、`gutter`、`wall`、`sidewalk` 等天然细长目标。因此 `aspect > 20` 不直接作为删除条件。
+
+### 严格几何清洗
+
+为了进一步降低训练异常风险，额外执行了保守硬清洗。
+
+硬删除规则：
+
+```text
+drop box if:
+  min(width, height) < 5
+  OR aspect_ratio > 100
+```
+
+为什么这样设：
+
+- `aspect > 20` 仍可能是合法长条目标；
+- `min_side < 5` 往往是极细边界、线条或标注误差，对 normalized box 训练不稳定；
+- `aspect > 100` 基本属于“线/边界”级别，容易让模型学习到不可泛化的极端框；
+- 删除量很小，不值得为了补齐 100 行而重新采样，避免引入新的 overlap 或分布扰动。
+
+清洗结果：
+
+| split | before | after | dropped rows |
+|---|---:|---:|---:|
+| train | 1,000,000 | 999,900 | 100 |
+| eval | 46,599 | 46,599 | 0 |
+
+原因计数：
+
+| reason | count |
+|---|---:|
+| `box_min_side_lt_5` | 87 |
+| `box_aspect_gt_100` | 37 |
+
+原因计数合计大于删除行数，是因为部分样本同时命中两个规则。
+
+严格清洗报告：
+
+```text
+/data/msz/point/opd_student_v1/strict_clean_report.json
+```
+
+清洗前完整审计备份：
+
+```text
+/data/msz/point/opd_student_v1/anomaly_audit_report_before_strict_clean.json
+```
+
+清洗后主审计报告：
+
+```text
+/data/msz/point/opd_student_v1/anomaly_audit_report.json
+```
+
+### 最终可用状态
+
+当前最终文件：
+
+```text
+/data/msz/point/opd_student_v1/train_prompts.jsonl
+/data/msz/point/opd_student_v1/eval_prompts.jsonl
+```
+
+最终行数：
+
+| split | rows |
+|---|---:|
+| train | 999,900 |
+| eval | 46,599 |
+
+最终 category 分布：
+
+| split | domain | general | boundary | format_conflict |
+|---|---:|---:|---:|---:|
+| train | 599,905 | 250,000 | 99,998 | 49,997 |
+| eval | 29,108 | 11,750 | 3,388 | 2,353 |
+
+最终 format 分布：
+
+| split | box | text | point |
+|---|---:|---:|---:|
+| train | 555,537 | 293,050 | 151,313 |
+| eval | 22,537 | 16,242 | 7,820 |
+
+最终 OPD student 的底层公版 source 分布也固化如下。这个表比 category 更底层，表示最终 train/eval 实际来自哪些公开数据池。
+
+| split | source | rows |
+|---|---|---:|
+| train | `keepalive` | 293,050 |
+| train | `vg_region` | 188,515 |
+| train | `robopoint` | 151,313 |
+| train | `vg_relationship_balanced` | 138,564 |
+| train | `vg_object` | 81,531 |
+| train | `refcoco` | 68,291 |
+| train | `flickr30k` | 51,513 |
+| train | `vg_relationship` | 27,123 |
+| eval | `keepalive` | 16,242 |
+| eval | `robopoint` | 7,820 |
+| eval | `refcoco` | 7,141 |
+| eval | `vg_region` | 6,443 |
+| eval | `flickr30k` | 4,898 |
+| eval | `vg_relationship_balanced` | 2,789 |
+| eval | `vg_object` | 801 |
+| eval | `vg_relationship` | 465 |
+
+按 OPD category 展开的 train source 分布：
+
+| category | source distribution |
+|---|---|
+| domain | `vg_region=127937`, `keepalive=112510`, `robopoint=110470`, `vg_relationship_balanced=96382`, `vg_object=55412`, `refcoco=44764`, `flickr30k=33279`, `vg_relationship=19151` |
+| general | `keepalive=170000`, `vg_region=19090`, `robopoint=15000`, `vg_relationship_balanced=13322`, `refcoco=11438`, `vg_object=11142`, `flickr30k=10008` |
+| boundary | `vg_region=27255`, `vg_relationship_balanced=26585`, `robopoint=15000`, `keepalive=10000`, `vg_object=5995`, `refcoco=5808`, `vg_relationship=4951`, `flickr30k=4404` |
+| format_conflict | `vg_region=14233`, `robopoint=10843`, `vg_object=8982`, `refcoco=6281`, `flickr30k=3822`, `vg_relationship=3021`, `vg_relationship_balanced=2275`, `keepalive=540` |
+
+按 target expert 展开的 train source 分布：
+
+| target expert | source distribution |
+|---|---|
+| `general_reasoning_expert` | `keepalive=274757`, `vg_region=9436`, `refcoco=7177`, `vg_object=7005`, `robopoint=6905`, `vg_relationship=4714` |
+| `robopoint_expert` | `robopoint=135475`, `keepalive=9711`, `vg_object=5691`, `vg_region=3849`, `refcoco=3219`, `vg_relationship=2050` |
+| `general_obj_expert` | `vg_object=53158`, `refcoco=43829`, `flickr30k=39545`, `vg_region=18979`, `vg_relationship=13856`, `keepalive=5919`, `robopoint=4689` |
+| `region_expert` | `vg_region=144175`, `flickr30k=7470`, `refcoco=7371`, `vg_relationship=6503`, `vg_object=6071`, `robopoint=2074`, `keepalive=1284` |
+| `spatial_rel_expert` | `vg_relationship_balanced=138564`, `vg_region=12076`, `vg_object=9606`, `refcoco=6695`, `flickr30k=4498`, `robopoint=2170`, `keepalive=1379` |
+
+最终硬校验：
+
+```text
+bad_json = 0
+hard_violations = {}
+duplicate_fingerprints = 0
+train/eval fingerprint_overlap = 0
+train/eval image_overlap = 0
+```
+
+保留的软长条 box：
+
+```text
+box_aspect_gt_20:
+  train = 1,600
+  eval  = 21
+```
+
+这些不作为错误删除，因为它们主要是合法细长物体或区域。后续如果训练仍对这些样本敏感，可以再做 domain-specific policy，例如仅对 `object_name in {"line", "horizon", "shore line"}` 的极端框降权，而不是全局删除所有长条目标。
+
+### 本轮数据工程结论
+
+1. 五个 expert 数据已形成可复用的 seed0 shuffled train/eval 体系。
+2. Expert train 已去除 point 长尾和非 point 超长文本长尾。
+3. OPD student 数据已按 60/25/10/5 设计构造，且每条样本有 route metadata。
+4. OPD domain 内部已按 20% seen、70% unseen、10% hard 落地。
+5. Boundary 数据显式覆盖 object/region/spatial/point/reasoning 的易混边界。
+6. Format/conflict 数据显式覆盖 strict format、错误格式诱导、prompt injection、坐标归一化。
+7. Train/eval 已严格去重，且图片层面无 overlap。
+8. 数据已完成真正逐行 shuffle，而不是 shard 级近似 shuffle。
+9. 最终数据无超长文本、无 point 超限、无缺图、无坏图、无硬几何异常。
+10. 当前 train 少 100 行，不补齐；因为删除比例只有 0.01%，补齐收益很低，反而可能引入新的追溯与去重风险。
+
+### 远端引用落地说明
+
+本节中所有远端路径仍保留为操作入口，但关键远端状态已经写成本地文本快照，包括：
+
+- clean pool 文件名与行数；
+- expert 设计配额；
+- expert 清洗后的真实 source 分布；
+- expert eval source 分布；
+- OPD student category/format/source/target-expert 分布；
+- shuffle 方法、bucket 数与完成时间；
+- anomaly audit 与 strict clean 规则；
+- 最终行数、去重、图片检查和硬异常状态。
+
+这样做的原因是 `/data/msz` 远端数据目录会频繁刷新，单纯记录路径不足以复现当时的数据事实。以后如果远端文件消失或被重建，本地 `REPORT.md` 仍保留本轮构造时的关键证据；需要恢复具体 JSONL 时，再以本节的 source 分布、seed、脚本和清洗规则作为重建依据。
+
+## 2026-05-21 训练执行日志：seed0 五个 100k Expert
+
+本节接在上一节“五个 Expert 与 OPD Student 融合数据”的数据工程记录之后。上一节记录点停在：五个 expert 的 seed0 shuffled train/eval 体系已完成，OPD student 数据也已构造、shuffle 和严格审计完成；但当时尚未把五个 expert 的正式训练执行线、失败尝试、最终可跑通配置与代码状态写入本地 report。
+
+本节只记录当前五个 expert 训练线。远端 `/data/msz` 的查看均为只读检查，实际落地修改仅发生在本地 `REPORT.md`。
+
+### 当前训练目标
+
+当前目标是基于 `/data/msz/point/data_expert_seed0_v1_shuffled` 中五个领域的数据，为 `/data/msz/models/8b_base` 生成五个 expert。每个 expert 取各自 shuffled train 的前 `100,000` 条，串行训练，避免多个 full finetune 同时抢显存。
+
+五个 expert 顺序固定为：
+
+| order | expert | train file |
+|---:|---|---|
+| 1 | `general_obj_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/general_obj_expert/train_shuffled_seed20260520.jsonl` |
+| 2 | `general_reasoning_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/general_reasoning_expert/train_shuffled_seed20260520.jsonl` |
+| 3 | `region_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/region_expert/train_shuffled_seed20260520.jsonl` |
+| 4 | `robopoint_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/robopoint_expert/train_shuffled_seed20260520.jsonl` |
+| 5 | `spatial_rel_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/spatial_rel_expert/train_shuffled_seed20260520.jsonl` |
+
+输出目录模式：
+
+```text
+/data/msz/models/seed0_<expert>_100k_mb1_filtered_stdtrainer_v1
+```
+
+当前 tmux 会话：
+
+```text
+full:seed0_mb1_std
+```
+
+当前启动脚本：
+
+```text
+/data/msz/point/run_seed0_five_experts_100k_mb1_filtered_stdtrainer_v1.sh
+```
+
+日志目录：
+
+```text
+/data/msz/point/logs/seed0_*_100k_mb1_filtered_stdtrainer_v1.log
+/data/msz/point/logs/seed0_100k_mb1_filtered_stdtrainer_v1.log
+```
+
+### 训练线尝试与决策日志
+
+这条线最初讨论过每个 expert 使用 `200k` 样本。为了方便后续恢复和扩展，先对每个领域的数据做真正 shuffle，再取前 `200k` 或前 `100k`，避免后续继续训练时因重新抽样造成不可追溯的分布漂移。
+
+随后因为稳定性优先，训练目标收缩为每个 expert 先跑 `100k`。当时的考虑是：先证明五个领域 expert 都能在当前 8 卡 MACA C500 环境下完整跑通，再决定是否继续扩到更大样本量。
+
+第一轮配置尝试过较大的 microbatch。`microbatch=4` 很快出现 OOM 风险；随后降到 `microbatch=2` 继续尝试。`microbatch=2` 在长样本附近仍有 OOM/卡住风险，因此又进一步切到 `microbatch=1`。
+
+为了解决 OOM 不稳定，曾做过一版最小自定义 `OomSkipTrainer`：只捕获 prepare/forward/backward 的 OOM，在多卡间同步 OOM flag，统一跳过该 batch 并清梯度。这个方案解决了“单卡 OOM 导致多卡不同步”的理论问题，但实际行为仍然不够稳定，尤其在 DeepSpeed/Accelerate 的训练步内部边界上，跳过 batch 容易引入状态不一致风险。
+
+因此最终训练线回到标准 `transformers.Trainer`。自定义 OOM-skip 代码没有删除，而是整段保留为注释，作为失败尝试与可回溯实现。active path 不使用它。
+
+训练前又针对导致 OOM 的样本特征做过过滤与重建：
+
+- 删除 point 数量长尾和异常 point 样本；
+- 删除非 point 数据中过长文本样本；
+- 保留已经 shuffle 好的文件名与顺序，使前 `100k` 的训练切片可复用；
+- 不做运行期 OOM skip，改为让标准 trainer 在仍然 OOM 时直接失败，避免 silent skip 改变训练语义。
+
+最终可跑通方案是：
+
+| item | value |
+|---|---|
+| base model | `/data/msz/models/8b_base` |
+| trainer | stock `transformers.Trainer` |
+| deepspeed | `/data/msz/point/configs/zero2.json` |
+| GPUs | 8 |
+| per-device microbatch | 1 |
+| gradient accumulation | 4 |
+| effective batch | `8 * 1 * 4 = 32` |
+| samples per expert | 100,000 |
+| expected steps per expert | 3,125 |
+| learning rate | `5e-6` |
+| warmup ratio | `0.03` |
+| lr scheduler | cosine |
+| max grad norm | `1.0` |
+| weight decay | `0` |
+| precision | bf16 |
+| model max length | `16384` |
+| min/max pixels | `50176 / 50176` |
+| save policy | no intermediate checkpoints, final model only |
+| OOM policy | standard trainer abort |
+| NaN policy | abort on non-finite logged metric |
+
+### 当前已跑通配置片段
+
+远端启动脚本中的 manifest 固化了当前训练线的核心配置：
+
+```bash
+RUN_TAG=seed0_100k_mb1_filtered_stdtrainer_v1
+LIMIT_SAMPLES=${LIMIT_SAMPLES:-100000}
+
+EXPERTS=(
+  general_obj_expert
+  general_reasoning_expert
+  region_expert
+  robopoint_expert
+  spatial_rel_expert
+)
+
+cat > "${ROOT}/outputs/${RUN_TAG}_manifest.json" <<EOF
+{
+  "run_tag": "${RUN_TAG}",
+  "model_base": "${MODEL_BASE}",
+  "data_root": "${DATA_ROOT}",
+  "out_base": "${OUT_BASE}",
+  "limit_samples": ${LIMIT_SAMPLES},
+  "per_device_train_batch_size": 1,
+  "gradient_accumulation_steps": 4,
+  "effective_batch_size": 32,
+  "expected_steps_per_expert": 3125,
+  "trainer": "transformers.Trainer",
+  "save_policy": "final_model_only_no_intermediate_checkpoints",
+  "nan_policy": "abort_on_any_non_finite_logged_metric",
+  "oom_policy": "standard_trainer_abort"
+}
+EOF
+```
+
+每个 expert 的实际 DeepSpeed launch 参数：
+
+```bash
+deepspeed --num_gpus=8 "${ROOT}/expert_sft.py" train \
+  --model-name-or-path "${MODEL_BASE}" \
+  --data-path "${data_path}" \
+  --output-dir "${output_dir}" \
+  --deepspeed "${ROOT}/configs/zero2.json" \
+  --num-train-epochs 1 \
+  --limit-samples "${LIMIT_SAMPLES}" \
+  --per-device-train-batch-size 1 \
+  --gradient-accumulation-steps 4 \
+  --learning-rate 5e-6 \
+  --weight-decay 0 \
+  --warmup-ratio 0.03 \
+  --max-grad-norm 1.0 \
+  --lr-scheduler-type cosine \
+  --logging-steps 1 \
+  --model-max-length 16384 \
+  --min-pixels 50176 \
+  --max-pixels 50176 \
+  --dataloader-num-workers 4 \
+  --bf16
+```
+
+MACA 环境变量仍使用此前验证过的组合：
+
+```bash
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}
+export DS_ACCELERATOR=cuda
+export CUDA_DEVICE_MAX_CONNECTIONS=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TOKENIZERS_PARALLELISM=false
+
+export NCCL_P2P_DISABLE=1
+export NCCL_SHM_DISABLE=1
+export TORCH_NCCL_BLOCKING_WAIT=1
+export NCCL_TIMEOUT=3600
+```
+
+### 当前 active 代码实现片段
+
+`expert_sft.py` 当前 active path 明确使用标准 `Trainer`。先用 callback 检查日志中的非有限值，一旦 loss、grad norm 或 learning rate 出现 NaN/Inf，就直接抛错中止：
+
+```python
+class AbortOnNonFiniteLog(TrainerCallback):
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        for key in ("loss", "grad_norm", "learning_rate"):
+            if not logs or key not in logs:
+                continue
+            value = logs[key]
+            try:
+                finite = math.isfinite(float(value))
+            except Exception:
+                finite = True
+            if not finite:
+                raise FloatingPointError(
+                    f"non-finite metric at step {state.global_step}: {key}={value}"
+                )
+```
+
+旧的 OOM skip 实验代码保留在文件中，但处于注释状态。关键标记如下：
+
+```python
+# Disabled OOM-skip experiment kept here for reference. The active path below
+# intentionally uses the stock transformers.Trainer.
+#
+# class OomSkipTrainer(Trainer):
+#     """Trainer with the narrowest possible OOM-only skip path."""
+#     ...
+#     def training_step(self, model, inputs, num_items_in_batch=None):
+#         ...
+#         # prepare/forward OOM and backward OOM were synced across ranks
+#         # before returning a zero loss placeholder.
+```
+
+模型加载与训练参数保留了之前验证过的 Qwen3-VL/MACA 兼容设置：
+
+```python
+config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+if hasattr(config, "use_cache"):
+    config.use_cache = False
+if hasattr(config, "_attn_implementation"):
+    config._attn_implementation = "eager"
+if hasattr(config, "attn_implementation"):
+    config.attn_implementation = "eager"
+
+model = get_model_cls().from_pretrained(
+    args.model_name_or_path,
+    config=config,
+    trust_remote_code=True,
+    low_cpu_mem_usage=True,
+    torch_dtype="auto",
+    attn_implementation="eager",
+)
+```
+
+`TrainingArguments` 的 checkpoint 策略是 final-only。训练过程中不写中间 checkpoint，避免 8B full finetune 的 optimizer/checkpoint 文件把磁盘打满：
+
+```python
+return TrainingArguments(
+    output_dir=args.output_dir,
+    num_train_epochs=args.num_train_epochs,
+    max_steps=args.max_steps,
+    per_device_train_batch_size=args.per_device_train_batch_size,
+    gradient_accumulation_steps=args.gradient_accumulation_steps,
+    learning_rate=args.learning_rate,
+    weight_decay=args.weight_decay,
+    warmup_ratio=args.warmup_ratio,
+    max_grad_norm=args.max_grad_norm,
+    lr_scheduler_type=args.lr_scheduler_type,
+    logging_steps=args.logging_steps,
+    save_strategy="no",
+    save_only_model=True,
+    save_safetensors=True,
+    bf16=args.bf16,
+    deepspeed=args.deepspeed,
+    remove_unused_columns=False,
+    dataloader_num_workers=args.dataloader_num_workers,
+    dataloader_pin_memory=True,
+    report_to=[],
+    optim=args.optim,
+    disable_tqdm=False,
+    seed=args.seed,
+    data_seed=args.seed,
+    **kwargs,
+)
+```
+
+训练入口也明确实例化标准 `Trainer`，而不是自定义 trainer：
+
+```python
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=dataset,
+    data_collator=collator,
+    processing_class=processor,
+    callbacks=[AbortOnNonFiniteLog()],
+)
+trainer.train()
+log(f"[train] finished global_step={trainer.state.global_step}")
+save_final_model(trainer, processor, args)
+log("[done] final-only expert SFT complete")
+```
+
+### 截至 2026-05-21 17:53 CST 的远端状态
+
+只读检查命令确认 tmux 中仍在运行：
+
+```text
+full:seed0_mb1_std
+```
+
+总 run log：
+
+```text
+[run] tag=seed0_100k_mb1_filtered_stdtrainer_v1 limit=100000 mb=1 base=/data/msz/models/8b_base
+[start] 2026-05-21 14:22:24 expert=general_obj_expert ...
+[done] 2026-05-21 17:39:48 expert=general_obj_expert ...
+[start] 2026-05-21 17:39:48 expert=general_reasoning_expert ...
+```
+
+`general_obj_expert` 已完成：
+
+| item | value |
+|---|---:|
+| samples | 100,000 |
+| global step | 3,125 |
+| train runtime | 11,513.0294 s |
+| train samples/s | 8.686 |
+| train steps/s | 0.271 |
+| train loss | 0.689730981349945 |
+
+完成标记：
+
+```text
+[train] finished global_step=3125
+[done] final-only expert SFT complete
+```
+
+最终模型目录已存在：
+
+```text
+/data/msz/models/seed0_general_obj_expert_100k_mb1_filtered_stdtrainer_v1
+```
+
+关键文件已落盘：
+
+```text
+config.json
+generation_config.json
+model-00001-of-00005.safetensors
+model-00002-of-00005.safetensors
+model-00003-of-00005.safetensors
+model-00004-of-00005.safetensors
+model-00005-of-00005.safetensors
+model.safetensors.index.json
+preprocessor_config.json
+run_summary.json
+trainer_state.json
+tokenizer.json
+tokenizer_config.json
+video_preprocessor_config.json
+```
+
+`general_reasoning_expert` 正在运行。早期因为数据分布从 object grounding 切到通用 reasoning/keepalive，起步 loss 和 raw grad norm 较大：
+
+```text
+step 1:  loss=5.1960, grad_norm=144.1368, lr=0
+step 5:  loss=6.5952, grad_norm=220.0865
+step 7:  loss=6.1664, grad_norm=244.1676
+```
+
+但随后很快回落，并未出现持续发散：
+
+```text
+step 24: loss=2.8445, grad_norm=48.9901
+step 39: loss=0.2291, grad_norm=3.6831
+step 50: loss=0.1909, grad_norm=4.1770
+step 95: loss=0.2138, grad_norm=2.6653, lr=5e-6
+step 150: loss=0.3031, grad_norm=6.3237
+```
+
+截至检查时未发现：
+
+- `FloatingPointError`
+- `Traceback`
+- `OutOfMemory`
+- `CUDA out of memory`
+- `Watchdog`
+- NaN/Inf metric
+
+GPU 状态也稳定在单进程 8 卡训练：
+
+| GPU | process | memory |
+|---:|---|---:|
+| 0 | `python3.12` | about 51.4 GB |
+| 1 | `python3.12` | about 52.7 GB |
+| 2 | `python3.12` | about 52.0 GB |
+| 3 | `python3.12` | about 52.3 GB |
+| 4 | `python3.12` | about 52.4 GB |
+| 5 | `python3.12` | about 52.7 GB |
+| 6 | `python3.12` | about 51.7 GB |
+| 7 | `python3.12` | about 51.3 GB |
+
+### 梯度范数解释记录
+
+本轮用户观察到 `general_reasoning_expert` 启动阶段 `grad_norm` 比 `general_obj_expert` 更大。当前判断是正常的分布切换现象，而不是训练失败信号。
+
+原因：
+
+1. `general_reasoning_expert` 从同一个 `/data/msz/models/8b_base` 重新起训，不继承 `general_obj_expert`；
+2. 它的数据以通用问答、keepalive、机器人常识和非坐标回答为主，和 object grounding 的输出分布差异明显；
+3. warmup 初期学习率很小，step 1 的 lr 为 `0`，大 raw norm 不等于大参数更新；
+4. `max_grad_norm=1.0` 只是 optimizer step 前的裁剪阈值，日志里打印的 `grad_norm` 仍可能是裁剪前或 DeepSpeed 统计的 raw norm，不会全程显示为 `1`；
+5. 当前 loss 和 raw grad norm 已从早期高值快速回落，且没有 non-finite 指标。
+
+因此当前策略是不干预继续跑。真正需要停的是以下情况：
+
+- 出现 NaN/Inf；
+- loss 异常变成持续 `0.0`；
+- raw grad norm 持续升高且 loss 不降；
+- OOM 或 Watchdog；
+- 日志长时间不刷新但 GPU 进程仍占用显存。
+
+### 当前训练线结论
+
+1. 之前的失败主要来自过大的 microbatch、长样本导致的 OOM 风险，以及自定义 OOM-skip 与标准 DeepSpeed/Trainer 状态机之间的不稳定边界。
+2. 已通过数据过滤、mb 降到 1、回归标准 `transformers.Trainer`、禁用中间 checkpoint，形成当前可跑通训练线。
+3. `general_obj_expert` 已完整完成并保存 final-only 模型。
+4. `general_reasoning_expert` 正常运行中，早期大梯度已回落，无 NaN/OOM/Traceback。
+5. 后续 `region_expert`、`robopoint_expert`、`spatial_rel_expert` 将由同一个脚本串行启动。
+6. 当前 report 只记录训练执行事实和可复现配置；模型训练本身继续在远端 tmux 后台进行。
+
+## 2026-05-25 续写：seed0 五 Expert 完成与五 Teacher OPD Online 训练
+
+本节从上一节继续。上一节的最后记录点是 `2026-05-21 17:53 CST`：`general_obj_expert` 的早期 final-only 标准 Trainer 版本已经完成，`general_reasoning_expert` 正在运行，并且当时仍在观察起步梯度范数偏大的现象。之后实际实验路线发生了几次关键调整，最终产物变成：
+
+1. 五个 seed0 expert 均重新按 `max_grad_norm=5.0`、`mb=1`、标准 Trainer、每个 100k 样本完成；
+2. 基于这五个 expert，重新实现五 teacher 在线 rollout 的 OPD 训练；
+3. OPD 最终使用 ZeRO-3、五 teacher 常驻 8 卡、左 padding、300k 样本、`mb=4` 完成；
+4. OPD 最终 checkpoint `2344` 保留完整优化器状态，中间 checkpoint 已清掉 optimizer state 以释放磁盘；
+5. 本地已补齐训练曲线资产和解析后的 metric 点。
+
+本次只读检查和本地报告更新发生在 `2026-05-25`。没有启动新的训练，也没有改动远端模型或训练脚本。
+
+### 本地报告资产
+
+本节新增或更新的本地资产如下：
+
+| asset | 说明 |
+|---|---|
+| `REPORT.md` | 本文件，追加完整实验日志。 |
+| `report/seed0_five_experts_100k_maxnorm5/` | 五个 expert 的远端训练日志副本、loss 曲线、解析后的 loss 点。 |
+| `report/seed0_five_experts_100k_maxnorm5/expert_loss_curves.svg` | 五 expert loss 曲线，MA50 平滑。 |
+| `report/seed0_five_experts_100k_maxnorm5/expert_loss_points.json` | 五 expert 每步 loss/grad_norm/lr 解析点。 |
+| `report/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1/` | OPD full run 的远端日志副本、run summary、曲线和解析点。 |
+| `report/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1/opd_loss_entropy_curves.svg` | OPD `loss/opd_loss/entropy` 曲线，MA50 平滑。 |
+| `report/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1/opd_metrics_points.json` | OPD 每步 `loss/grad_norm/lr/opd_loss/entropy/route/tokens` 解析点。 |
+| `report/training_curve_summary_20260525.json` | 曲线解析摘要，记录点数、首尾值、min/max、末端 MA50。 |
+
+![seed0 five expert loss curves](report/seed0_five_experts_100k_maxnorm5/expert_loss_curves.svg)
+
+![OPD loss and entropy curves](report/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1/opd_loss_entropy_curves.svg)
+
+曲线提取方法：
+
+1. 从远端日志中只读复制训练日志到本地 `report/`；
+2. 解析包含 `{'loss': ...}` 的 Trainer metric 行；
+3. OPD 解析出 `2344` 条 step metric，对应最终 `global_step=2344`；
+4. 每个 expert 解析出 `3125` 条 step metric，对应 `100000 / (8 * 1 * 4) = 3125`；
+5. SVG 中使用 MA50 平滑，原始点完整保留在 JSON 中。图的 y 轴为了可读性按高分位截断，原始 min/max 以 JSON 和下表为准。
+
+### 五个 Expert 的最终训练目标
+
+最终目标是基于 `/data/msz/point/data_expert_seed0_v1_shuffled` 中的五份数据，使用同一个 `/data/msz/models/8b_base` 作为 base，分别训练五个领域 expert。每个 expert 固定使用对应 shuffled train 的前 `100,000` 条。
+
+选择 `shuffle 后取前 100k` 的动机：
+
+1. 每个领域的样本顺序可复现，后续如果继续训练到 200k 或更多，只需要从同一 shuffled 文件继续切片；
+2. 避免多次随机抽样导致“这次前 100k”和“下次续训后 100k”分布不可追溯；
+3. 先把五个 expert 都跑通，证明数据过滤和标准 Trainer 配置稳定，再考虑扩大样本量。
+
+最终五个 expert：
+
+| expert | 训练数据 |
+|---|---|
+| `general_reasoning_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/general_reasoning_expert/train_shuffled_seed20260520.jsonl` |
+| `region_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/region_expert/train_shuffled_seed20260520.jsonl` |
+| `robopoint_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/robopoint_expert/train_shuffled_seed20260520.jsonl` |
+| `spatial_rel_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/spatial_rel_expert/train_shuffled_seed20260520.jsonl` |
+| `general_obj_expert` | `/data/msz/point/data_expert_seed0_v1_shuffled/general_obj_expert/train_shuffled_seed20260520.jsonl` |
+
+最终输出模型：
+
+| expert | model path |
+|---|---|
+| `general_reasoning_expert` | `/data/msz/models/seed0_general_reasoning_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+| `region_expert` | `/data/msz/models/seed0_region_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+| `robopoint_expert` | `/data/msz/models/seed0_robopoint_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+| `spatial_rel_expert` | `/data/msz/models/seed0_spatial_rel_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+| `general_obj_expert` | `/data/msz/models/seed0_general_obj_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+
+### 五个 Expert 的失败路径与修正
+
+这轮五 expert 生成不是一次到位，关键阻碍如下。
+
+第一类阻碍是 OOM。最开始讨论过 `200k` 样本和更大的 microbatch。随后为了稳定性先降到每个 expert `100k`。尝试过 `microbatch=4`，发生 OOM；再尝试 `microbatch=2`，仍然会被超长样本打爆。中间讨论过在 Trainer 上做极小 OOM skip 自定义，但实际行为不稳定，和标准 DeepSpeed/Trainer 状态机之间的边界不够可靠。因此最终回到标准 `transformers.Trainer`，不再使用 OOM skip。
+
+第二类阻碍是超长样本。OOM 的根因不是普通样本，而是少量超长视觉语言样本造成单 batch 显存峰值过高。处理方式是重建数据并过滤超长样本，然后使用标准 Trainer、`mb=1` 来保证可跑通。旧的 OOM-skip 试验代码没有删除，只在远端代码中注释保留，便于后续复盘，但 active path 使用标准 Trainer。
+
+第三类阻碍是梯度范数策略。`general_reasoning_expert` 起步阶段 raw `grad_norm` 明显大于 `general_obj_expert`，早期出现过 `grad_norm` 上百的记录。判断原因是 reasoning 数据分布和 object grounding 输出分布差异更大，而且 warmup 初期 lr 极小，大 raw norm 不等于实际大更新。用户希望保留梯度信号，所以没有用过强的 `max_grad_norm=1` 作为最终 expert 配置，而是改为 `max_grad_norm=5.0`。
+
+最终策略：
+
+| item | value |
+|---|---|
+| trainer | 标准 `transformers.Trainer` |
+| base | `/data/msz/models/8b_base` |
+| samples per expert | `100000` |
+| per-device microbatch | `1` |
+| gradient accumulation | `4` |
+| effective batch | `8 * 1 * 4 = 32` |
+| expected steps per expert | `3125` |
+| learning rate | `5e-6` |
+| warmup ratio | `0.03` |
+| scheduler | cosine |
+| max grad norm | `5.0` |
+| DeepSpeed | ZeRO-2, `/data/msz/point/configs/zero2_gradclip5.json` |
+| checkpoint policy | final-only, no intermediate checkpoint |
+| OOM policy | 标准 Trainer 失败即中止，不自定义 skip |
+| NaN policy | 任何 logged metric 非有限即 abort |
+
+最终运行脚本：
+
+```bash
+/data/msz/point/run_seed0_five_experts_100k_mb1_filtered_stdtrainer_maxnorm5_v1.sh
+```
+
+最终训练顺序不是最初的 `general_obj` 先行顺序，而是从原来的第二段开始，最后补跑 `general_obj`：
+
+```text
+general_reasoning_expert
+region_expert
+robopoint_expert
+spatial_rel_expert
+general_obj_expert
+```
+
+这个顺序的动机是：`general_obj_expert` 在旧配置下已经有一版完成产物；调整 `max_grad_norm=5.0` 后，优先跑尚未完成或更关键的后续段，最后再用新配置补齐 `general_obj_expert`，保证五个最终 expert 配置一致。
+
+### 五个 Expert 的实际完成记录
+
+总 run log：
+
+```text
+/data/msz/point/logs/seed0_100k_mb1_filtered_stdtrainer_maxnorm5_v1.log
+```
+
+每个 expert 的单独日志：
+
+```text
+/data/msz/point/logs/seed0_general_reasoning_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1.log
+/data/msz/point/logs/seed0_region_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1.log
+/data/msz/point/logs/seed0_robopoint_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1.log
+/data/msz/point/logs/seed0_spatial_rel_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1.log
+/data/msz/point/logs/seed0_general_obj_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1.log
+```
+
+总 log 里有一次 `2026-05-21 18:33:06` 的早期启动记录，随后在 `18:37:15` 重新开始有效 run。最终完成记录以第二次启动为准。
+
+| order | expert | start | done | global step | train loss | runtime s | samples/s | steps/s |
+|---:|---|---|---|---:|---:|---:|---:|---:|
+| 1 | `general_reasoning_expert` | 2026-05-21 18:37:15 | 2026-05-21 21:55:01 | 3125 | 0.277714 | 11540.0691 | 8.665 | 0.271 |
+| 2 | `region_expert` | 2026-05-21 21:55:01 | 2026-05-22 01:12:33 | 3125 | 0.762703 | 11504.3460 | 8.692 | 0.272 |
+| 3 | `robopoint_expert` | 2026-05-22 01:12:33 | 2026-05-22 04:36:07 | 3125 | 0.763481 | 11887.3439 | 8.412 | 0.263 |
+| 4 | `spatial_rel_expert` | 2026-05-22 04:36:07 | 2026-05-22 07:53:44 | 3125 | 0.733542 | 11519.9668 | 8.681 | 0.271 |
+| 5 | `general_obj_expert` | 2026-05-22 07:53:44 | 2026-05-22 11:11:02 | 3125 | 0.688775 | 11501.3205 | 8.695 | 0.272 |
+
+每个 final model 目录均包含：
+
+```text
+config.json
+generation_config.json
+model-00001-of-00005.safetensors
+model-00002-of-00005.safetensors
+model-00003-of-00005.safetensors
+model-00004-of-00005.safetensors
+model-00005-of-00005.safetensors
+model.safetensors.index.json
+preprocessor_config.json
+run_summary.json
+trainer_state.json
+tokenizer.json
+tokenizer_config.json
+video_preprocessor_config.json
+```
+
+Expert loss 曲线摘要：
+
+| expert | parsed steps | first loss | last loss | last MA50 loss | min loss | max loss |
+|---|---:|---:|---:|---:|---:|---:|
+| `general_reasoning_expert` | 3125 | 5.1960 | 0.2699 | 0.2372 | 0.0693 | 6.5971 |
+| `region_expert` | 3125 | 1.6029 | 0.6987 | 0.7329 | 0.6179 | 1.6029 |
+| `robopoint_expert` | 3125 | 2.5643 | 0.7267 | 0.7247 | 0.5497 | 3.5471 |
+| `spatial_rel_expert` | 3125 | 1.3992 | 0.6992 | 0.7053 | 0.6055 | 1.5657 |
+| `general_obj_expert` | 3125 | 1.4039 | 0.7324 | 0.6729 | 0.5145 | 1.9565 |
+
+曲线解释：
+
+1. `general_reasoning_expert` 起步 loss 和 raw grad norm 最大，但很快回落，符合“数据分布从坐标输出转到通用/文本推理”的预期；
+2. `region/robopoint/spatial_rel/general_obj` 的 loss 更平滑，末端 MA50 都在 `0.67` 到 `0.73` 左右；
+3. 这五个 expert 只保存 final model，不保存中间 optimizer checkpoint，所以没有在 expert 训练阶段继续制造磁盘压力。
+
+### OPD 数据与训练目标
+
+五 expert 完成后，目标变成：基于 `/data/msz/models/8b_base` 训练一个 OPD student，使它在不同 prompt 类型下学习五个 expert 的行为，而不是把所有数据预先离线生成成固定 logits。
+
+OPD 数据：
+
+```text
+/data/msz/point/opd_student_v1/train_prompts.jsonl
+```
+
+数据设计动机：
+
+1. Domain 数据让 student 学到各自领域的 expert 行为；
+2. General 数据用于保持通用 VQA/文本回答能力，避免模型只会坐标输出；
+3. Boundary 数据专门覆盖 object、region、spatial relation、point、reasoning 之间容易路由混淆的样本；
+4. Format-conflict 数据用于压住输出格式漂移，尤其是 `<point>`、`<box>` 和纯文本回答之间的边界；
+5. 每条样本带 `opd.target_expert`、候选 expert、源文件和格式元信息，便于在线路由到对应 teacher。
+
+最终 full run 只取前 `300000` 条 raw row。由于 ZeRO-3 teacher generation 需要所有 rank 同步调用同一个 teacher，dataset 在 schedule 上做了 route-block shuffle，并补齐到 `300032` 行，保证分布式 microstep 中各 rank 路由一致。
+
+OPD full run 的 dataset summary：
+
+| item | value |
+|---|---:|
+| raw rows seen | 300000 |
+| expanded rows | 300032 |
+| padded rows | 32 |
+| route policy | `target` |
+| group by route | `false` |
+| route block shuffle | `true` |
+| shuffle seed | `20260520` |
+
+按 route 的 raw row 分布：
+
+| route | rows |
+|---|---:|
+| `general_reasoning_expert` | 92695 |
+| `general_obj_expert` | 54355 |
+| `region_expert` | 52512 |
+| `spatial_rel_expert` | 52407 |
+| `robopoint_expert` | 48031 |
+
+按 route 的 schedule 分布：
+
+| route | scheduled rows |
+|---|---:|
+| `general_reasoning_expert` | 92704 |
+| `general_obj_expert` | 54368 |
+| `region_expert` | 52512 |
+| `spatial_rel_expert` | 52416 |
+| `robopoint_expert` | 48032 |
+
+按样本类别：
+
+| category | rows |
+|---|---:|
+| `domain` | 180438 |
+| `general` | 74603 |
+| `boundary` | 30078 |
+| `format_conflict` | 14881 |
+
+按期望输出格式：
+
+| expected format | rows |
+|---|---:|
+| `box` | 166891 |
+| `text` | 87724 |
+| `point` | 45385 |
+
+候选 expert 数量：
+
+| candidate count | rows |
+|---:|---:|
+| 1 | 269922 |
+| 2 | 27106 |
+| 3 | 2972 |
+
+### OPD 实现设计
+
+OPD 主脚本：
+
+```text
+/data/msz/point/train_opd_online_vl.py
+```
+
+本地同步副本：
+
+```text
+train_opd_online_vl.py
+```
+
+核心设计调整：
+
+1. OPD 不再使用预先生成好的 teacher logits；
+2. 每个 sample 在训练时根据 `target_expert` 路由到对应 teacher；
+3. teacher 在线 rollout 生成 response tokens；
+4. student 对 teacher rollout 的 top1 token 序列做 CE；
+5. 对领域数据使用对应领域 teacher；
+6. 对通用/边界/格式冲突数据按数据内 route 元信息路由；
+7. 记录 `loss`、`opd_loss`、`grad_norm`、`entropy`、`opd_entropy`、`opd_route_id`、`opd_response_tokens`。
+
+最关键的工程变化是 teacher 加载方式。最初如果按顺序或 lazy 方式逐个加载 teacher，训练会频繁发生模型加载/释放，速度和状态都不可接受。最终实现为：
+
+```text
+teacher_load_mode = preloaded_zero3
+```
+
+五个 teacher 全部常驻，且都通过 ZeRO-3 分片在 8 卡上：
+
+| teacher | path |
+|---|---|
+| `general_obj_expert` | `/data/msz/models/seed0_general_obj_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+| `region_expert` | `/data/msz/models/seed0_region_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+| `robopoint_expert` | `/data/msz/models/seed0_robopoint_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+| `spatial_rel_expert` | `/data/msz/models/seed0_spatial_rel_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+| `general_reasoning_expert` | `/data/msz/models/seed0_general_reasoning_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+
+ZeRO-3 teacher/student config：
+
+```text
+/data/msz/point/configs/zero3_opd_maca.json
+```
+
+关键点：
+
+| config | value |
+|---|---|
+| zero stage | 3 |
+| optimizer offload | none |
+| param offload | none |
+| overlap comm | false |
+| contiguous gradients | true |
+| reduce bucket size | 20000000 |
+| prefetch bucket size | 20000000 |
+| gather 16-bit weights on save | true |
+| bf16 | enabled |
+
+因为 ZeRO-3 teacher 的 generate 需要所有 rank 同步进入同一个 teacher，不能让 rank0 路由到 teacher A、rank1 路由到 teacher B。为此引入 route-block shuffle：
+
+1. 样本仍然随机化；
+2. 但随机化单位是 route block；
+3. 每个分布式 microstep 内所有 rank 看到相同 route；
+4. 这样既保留 route 顺序随机性，又满足 ZeRO-3 collective 调用约束。
+
+### OPD Right Padding Bug 与 Left Padding 修正
+
+在 `mb=2` 或更大 batch 下，decoder-only generation 如果使用 right padding，会导致 generate 从 padding 后的位置继续，出现 warning 和潜在错误：
+
+```text
+right-padding was detected
+```
+
+因此 full run 前做了 left padding 修正：
+
+1. `configure_left_padding(processor)` 同时设置 processor/tokenizer 的 `padding_side="left"`；
+2. collator 在 tokenization 前调用该函数；
+3. rollout 后的 continuation label 不再使用每个样本自己的 prompt length；
+4. 对 left-padded batch，统一使用 `prompt_width = inputs["input_ids"].shape[1]` 作为 continuation 起点；
+5. generated attention mask 使用 prompt mask 加 suffix mask。
+
+这个修正确保 `mb=4` 时每个样本的 teacher rollout token 对齐到正确的 continuation 区域。
+
+### OPD Smoke 与 Full Run 路线
+
+OPD 没有直接上 full run，而是经过了几步验证。
+
+第一步，先用前 `100` 条样本做 smoke，验证：
+
+1. OPD dataset 能正确读取；
+2. route 元信息能正确映射到 teacher；
+3. 五 teacher 能常驻 ZeRO-3；
+4. 在线 rollout 能返回 token；
+5. student CE 和 entropy 能正常计算。
+
+第二步，做 checkpoint smoke。先尝试 `100 steps / save_steps=50`，发现过慢；随后缩短为 `max20steps / save_steps=10`，验证训练中保存 checkpoint 能成功。这个阶段的目的不是训练质量，而是确认 save path、ZeRO-3 model state、optimizer state、scheduler state 都能落盘。
+
+第三步，启动 `100k / mb=2 / save_steps=300`。这一步确认显存大体可控，但暴露了 right padding 问题，因此停止并修 left padding。
+
+第四步，最终 full run：
+
+```bash
+/data/msz/point/run_opd_five_online_300k_mb4_save500_zero3.sh
+```
+
+实际 DeepSpeed 命令核心参数：
+
+```bash
+deepspeed --num_gpus=8 train_opd_online_vl.py train \
+  --model-name-or-path /data/msz/models/8b_base \
+  --data-path /data/msz/point/opd_student_v1/train_prompts.jsonl \
+  --output-dir /data/msz/models/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1 \
+  --deepspeed /data/msz/point/configs/zero3_opd_maca.json \
+  --route-policy target \
+  --no-group-by-route \
+  --route-block-shuffle \
+  --teacher-load-mode preloaded_zero3 \
+  --teacher-deepspeed /data/msz/point/configs/zero3_opd_maca.json \
+  --limit-samples 300000 \
+  --save-steps 500 \
+  --save-total-limit 5 \
+  --per-device-train-batch-size 4 \
+  --gradient-accumulation-steps 4 \
+  --learning-rate 1e-6 \
+  --warmup-ratio 0.03 \
+  --max-grad-norm 1.0 \
+  --num-train-epochs 1 \
+  --logging-steps 1 \
+  --model-max-length 16384 \
+  --min-pixels 50176 \
+  --max-pixels 50176 \
+  --bf16 \
+  --gradient-checkpointing
+```
+
+OPD full run 训练配置：
+
+| item | value |
+|---|---:|
+| raw samples | 300000 |
+| expanded scheduled samples | 300032 |
+| per-device microbatch | 4 |
+| gradient accumulation | 4 |
+| effective batch | `8 * 4 * 4 = 128` |
+| expected steps | 2344 |
+| learning rate | `1e-6` |
+| warmup ratio | `0.03` |
+| max grad norm | `1.0` |
+| save steps | 500 |
+| save total limit | 5 |
+| DeepSpeed | ZeRO-3 |
+| teacher mode | `preloaded_zero3` |
+| OPD target | online teacher rollout top1 |
+
+### OPD Full Run 结果
+
+OPD full run 日志：
+
+```text
+/data/msz/point/logs/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1.log
+```
+
+输出模型：
+
+```text
+/data/msz/models/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1
+```
+
+完成记录：
+
+| metric | value |
+|---|---:|
+| global step | 2344 |
+| train runtime | 167955.0764 s |
+| train samples/s | 1.786 |
+| train steps/s | 0.014 |
+| train loss | 0.3442268627489132 |
+| final logged loss | 0.1846 |
+| final logged opd_loss | 0.16669046878814697 |
+| final logged entropy | 0.17483912408351898 |
+| final logged grad_norm | 2.842887765948197 |
+| final logged response tokens | 25 |
+
+日志中的完成标记：
+
+```text
+100%|██████████| 2344/2344 [46:37:47<00:00, 62.30s/it]
+{'train_runtime': 167955.0764, 'train_samples_per_second': 1.786, 'train_steps_per_second': 0.014, 'train_loss': 0.3442268627489132, 'opd_route_id': 4.0, 'opd_response_tokens': 25.0, 'opd_loss': 0.16669046878814697, 'entropy': 0.17483912408351898, 'opd_entropy': 0.17483912408351898, 'epoch': 1.0}
+[opd-online] finished global_step=2344 train_loss=0.3442268627489132
+[done] OPD online training complete
+```
+
+OPD 曲线解析摘要：
+
+| metric | value |
+|---|---:|
+| parsed step metrics | 2344 |
+| first loss | 4.5744 |
+| first opd_loss | 2.977684736251831 |
+| first entropy | 1.2759050130844116 |
+| last loss | 0.1846 |
+| last opd_loss | 0.16669046878814697 |
+| last entropy | 0.17483912408351898 |
+| loss min | 0.0679 |
+| loss max | 5.6432 |
+| loss last MA50 | 0.247998 |
+| opd_loss last MA50 | 0.240245 |
+| entropy last MA50 | 0.248550 |
+
+曲线解释：
+
+1. 早期 `loss/opd_loss/entropy` 均较高，符合 base student 刚开始模仿多 teacher 在线 rollout 的状态；
+2. 中后段 loss 和 entropy 明显下降，说明 student 对 teacher rollout token 分布越来越确定；
+3. 末端 `loss MA50` 和 `opd_loss MA50` 都在 `0.24` 左右，最终 logged `opd_loss=0.1667`；
+4. 没有出现 loss 持续变成 `0.0` 的旧 NaN cascade 形态；
+5. 只读 grep 未发现 `Traceback`、`RuntimeError`、`OOM`、`out of memory`、`nan`、`inf`、`non-finite`、`right-padding`、`Watchdog` 等异常关键词。
+
+### Checkpoint 与磁盘状态
+
+Full run 过程中按 `save_steps=500` 和 `save_total_limit=5` 保留了五个 checkpoint：
+
+| checkpoint | saved time |
+|---|---|
+| `checkpoint-500` | 2026-05-23 01:05:09 |
+| `checkpoint-1000` | 2026-05-23 11:00:56 |
+| `checkpoint-1500` | 2026-05-23 20:54:03 |
+| `checkpoint-2000` | 2026-05-24 06:48:18 |
+| `checkpoint-2344` | 2026-05-24 13:39:23 |
+
+训练完成后检查 `checkpoint-2344`，确认包含完整可恢复状态：
+
+```text
+global_step2344/bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt
+global_step2344/bf16_zero_pp_rank_1_mp_rank_00_optim_states.pt
+global_step2344/bf16_zero_pp_rank_2_mp_rank_00_optim_states.pt
+global_step2344/bf16_zero_pp_rank_3_mp_rank_00_optim_states.pt
+global_step2344/bf16_zero_pp_rank_4_mp_rank_00_optim_states.pt
+global_step2344/bf16_zero_pp_rank_5_mp_rank_00_optim_states.pt
+global_step2344/bf16_zero_pp_rank_6_mp_rank_00_optim_states.pt
+global_step2344/bf16_zero_pp_rank_7_mp_rank_00_optim_states.pt
+global_step2344/zero_pp_rank_0_mp_rank_00_model_states.pt
+...
+global_step2344/zero_pp_rank_7_mp_rank_00_model_states.pt
+scheduler.pt
+rng_state_0.pth
+...
+rng_state_7.pth
+trainer_state.json
+```
+
+随后为了释放磁盘，只清理中间 checkpoint 的 optimizer state：
+
+```text
+checkpoint-500/global_step500/bf16_zero_pp_rank_0..7_mp_rank_00_optim_states.pt
+checkpoint-1000/global_step1000/bf16_zero_pp_rank_0..7_mp_rank_00_optim_states.pt
+checkpoint-1500/global_step1500/bf16_zero_pp_rank_0..7_mp_rank_00_optim_states.pt
+checkpoint-2000/global_step2000/bf16_zero_pp_rank_0..7_mp_rank_00_optim_states.pt
+```
+
+清理前这些 optimizer state 合计约 `374G`。清理后验证：
+
+1. 只有 `checkpoint-2344` 仍保留 8 份 optimizer state；
+2. 中间 checkpoint 仍保留模型权重和 trainer 相关文件，但不再能完整恢复优化器状态；
+3. 最终 checkpoint 仍可完整恢复；
+4. 总目录大小约 `179G`。
+
+清理后各 checkpoint 大小：
+
+| checkpoint | size |
+|---|---:|
+| `checkpoint-500` | 18G |
+| `checkpoint-1000` | 18G |
+| `checkpoint-1500` | 18G |
+| `checkpoint-2000` | 18G |
+| `checkpoint-2344` | 111G |
+
+### 当前实验状态
+
+截至本次记录：
+
+1. 五个 seed0 `100k` expert 已完成，最终配置统一为 `mb=1`、标准 Trainer、`max_grad_norm=5.0`、final-only；
+2. 五 teacher online OPD 已完成，最终模型在 `/data/msz/models/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1`；
+3. OPD final checkpoint `2344` 保留完整 optimizer/model/scheduler/rng/trainer state；
+4. 中间 checkpoint 的 optimizer state 已清理，避免继续占用 300G 以上空间；
+5. 本地已落盘五 expert loss 曲线和 OPD loss/entropy 曲线；
+6. 当前没有在本次 side conversation 中启动新的 eval；
+7. 如果后续恢复实验，优先从本节列出的五 expert 路径、OPD run summary、`train_opd_online_vl.py`、`zero3_opd_maca.json` 和曲线 JSON 开始。
+
+最小恢复清单：
+
+| purpose | path |
+|---|---|
+| OPD student data | `/data/msz/point/opd_student_v1/train_prompts.jsonl` |
+| OPD train script | `/data/msz/point/train_opd_online_vl.py` |
+| OPD full launch script | `/data/msz/point/run_opd_five_online_300k_mb4_save500_zero3.sh` |
+| OPD ZeRO-3 config | `/data/msz/point/configs/zero3_opd_maca.json` |
+| Expert launch script | `/data/msz/point/run_seed0_five_experts_100k_mb1_filtered_stdtrainer_maxnorm5_v1.sh` |
+| Expert ZeRO-2 config | `/data/msz/point/configs/zero2_gradclip5.json` |
+| OPD full output | `/data/msz/models/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1` |
+| OPD final checkpoint | `/data/msz/models/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1/checkpoint-2344` |
+| Local OPD curve | `report/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1/opd_loss_entropy_curves.svg` |
+| Local expert curve | `report/seed0_five_experts_100k_maxnorm5/expert_loss_curves.svg` |
+
+# Raw Holdout 8 模型完整评估 - 2026-05-25
+
+本节整理 raw-holdout 10k 评估与 OPD checkpoint 评估。8 模型主评估来自远端
+`/data/msz/point/eval_raw_holdout_v1/runs_8models_20260525_120552`；OPD checkpoint 曲线来自
+`/data/msz/point/eval_raw_holdout_v1/opd_ckpts_20260525_124224`。完整 JSON 与独立 Markdown 报告已归档到本地：
+
+```text
+report/raw_holdout_eval_8models_20260525/
+```
+
+## 评估过程
+
+1. 构造 10k raw-holdout 评估集，覆盖通用 VQA、point grounding、box grounding、区域描述、关系框选与语义导航框选。
+2. 训练集阻断：排除 5 个 expert 各自前 100k 训练样本、最终 OPD 训练样本，并用 source-line key、内容 fingerprint、训练图片集合做泄漏检查。
+3. 严格去重验收：fingerprint、source line、image+prompt+answer 三类重复均为 0；训练图片泄漏为 0。
+4. 8 模型主评估：每个模型单张卡，8 卡并行；`BATCH_SIZE=256`，`max_new_tokens=64`。生成阶段单卡显存约 35-37GB，GPU util 主要在 85%-98%。
+5. OPD checkpoint 评估：checkpoint-500/1000/1500/2000 各占一张卡并行评估，同样 10k 样本、同一套指标；并把前一轮 checkpoint-2344 的 OPD final 结果并入曲线。
+6. 指标：box 使用格式率、坐标有效率、IoU、Acc@0.3/0.5/0.75、中心距离；point 使用格式率、坐标有效率、Hit@50/Hit@100、距离与点数偏差；text/VQA 使用 exact、loose、boolean accuracy、multiple-choice accuracy。
+
+## 评估集与去重验收
+
+| 项目 | 数值 |
+| --- | ---: |
+| 总样本 | 10000 |
+| 唯一图片 | 8251 |
+| Fingerprint 重复 | 0 |
+| Source line 重复 | 0 |
+| Image+prompt+answer 重复 | 0 |
+| 训练图片泄漏行数 | 0 |
+| 重复图片路径数 | 1168 |
+| 落在重复图片上的样本行数 | 2917 |
+
+重复图片不等价于重复样本。RefCOCO、Visual Genome、Flickr30K 一张图天然会有多个 object/region/relation 标注；本次真正严格去重的 source、fingerprint、image+prompt+answer 均为 0，同时训练图片泄漏为 0。
+
+### 数据池分布
+
+| 数据池 | 领域/场景 | 样本数 |
+| --- | --- | ---: |
+| `refcoco` | RefCOCO / 指代表达框选 | 1100 |
+| `flickr30k_entities` | Flickr30K Entities / 短语实体框选 | 900 |
+| `visual_genome_object` | Visual Genome Object / 通用物体框选 | 1100 |
+| `visual_genome_region` | Visual Genome Region / 区域描述框选 | 1100 |
+| `visual_genome_relationship` | Visual Genome Relationship / 关系框选 | 1100 |
+| `semantic_nav_box` | Semantic Nav Box / 语义导航框选 | 800 |
+| `grounding_point` | Grounding point / 点选 | 1400 |
+| `keepalive_vqa` | Keepalive VQA / 通用能力 | 2500 |
+
+### 任务格式分布
+
+| 任务格式 | 样本数 |
+| --- | ---: |
+| box | 6100 |
+| point | 1400 |
+| text | 2500 |
+
+## 8 模型总体结果
+
+| 模型 | n | Format | Coord | Box IoU | Box Acc@0.5 | Point Hit@100 | Text loose | Bool acc | MC acc |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 10000 | 85.3% | 80.5% | 0.385 | 40.9% | 0.0% | 0.8% | 0.0% | 18.7% |
+| Qwen3-VL-8B-Instruct | 10000 | 85.8% | 81.0% | 0.413 | 43.3% | 0.0% | 52.0% | 81.2% | 29.0% |
+| General reasoning expert | 10000 | 100.0% | 100.0% | 0.444 | 48.1% | 83.4% | 87.1% | 89.0% | 21.5% |
+| RoboPoint expert | 10000 | 100.0% | 100.0% | 0.454 | 49.8% | 87.9% | 85.8% | 87.5% | 16.8% |
+| General obj expert | 10000 | 100.0% | 100.0% | 0.470 | 51.3% | 82.5% | 84.6% | 85.8% | 24.3% |
+| Region expert | 10000 | 100.0% | 100.0% | 0.469 | 51.5% | 81.5% | 83.0% | 81.6% | 20.6% |
+| Spatial rel expert | 10000 | 100.0% | 100.0% | 0.473 | 51.6% | 81.5% | 84.2% | 85.8% | 21.5% |
+| OPD final | 10000 | 100.0% | 100.0% | 0.468 | 51.3% | 84.1% | 87.4% | 90.0% | 20.6% |
+
+总体观点：
+
+- **OPD final 是综合最均衡的模型。** 它的 box Acc@0.5=51.3%、point Hit@100=84.1%、text loose=87.4%、bool acc=90.0%。它不是每个单项的绝对第一，但在 grounding 与通用能力之间的折中最好。
+- **box 单项最强的是 Spatial rel expert。** 它的 box IoU=0.473、Acc@0.5=51.6%，略高于 OPD final 的 0.468/51.3%。差距很小，说明 OPD 融合基本保住了区域与关系框选能力。
+- **point 单项最强的是 RoboPoint expert。** Hit@100=87.9%，高于 OPD final 的 84.1%。这符合训练目标，也说明 point 能力在融合中有约 3.8 个百分点的损失。
+- **通用能力最强的是 OPD final。** text loose=87.4%、bool acc=90.0%，都是最高；说明 OPD 的通用数据与边界/格式数据没有被 grounding 数据淹没。
+- **base 与 Qwen3-VL-8B-Instruct 在 point 上为 0，不代表视觉完全不会，而是格式未对齐。** 二者几乎不按本项目训练期望输出 `<point>`，而 expert/OPD 的 point format 都达到或接近 100%。
+
+## 按任务类型拆分
+
+### Box Grounding
+
+| 模型 | n | Format | Coord | IoU | Acc@0.3 | Acc@0.5 | Acc@0.75 | CenterDist |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 6100 | 98.9% | 98.9% | 0.385 | 52.3% | 40.9% | 21.0% | 153.5 |
+| Qwen3-VL-8B-Instruct | 6100 | 99.6% | 99.6% | 0.413 | 55.8% | 43.3% | 24.7% | 140.1 |
+| General reasoning expert | 6100 | 100.0% | 100.0% | 0.444 | 58.3% | 48.1% | 29.8% | 138.4 |
+| RoboPoint expert | 6100 | 100.0% | 100.0% | 0.454 | 59.2% | 49.8% | 31.1% | 132.7 |
+| General obj expert | 6100 | 100.0% | 100.0% | 0.470 | 60.4% | 51.3% | 33.5% | 129.6 |
+| Region expert | 6100 | 100.0% | 100.0% | 0.469 | 60.7% | 51.5% | 33.1% | 130.0 |
+| Spatial rel expert | 6100 | 100.0% | 100.0% | 0.473 | 61.0% | 51.6% | 33.4% | 128.2 |
+| OPD final | 6100 | 100.0% | 100.0% | 0.468 | 60.3% | 51.3% | 32.9% | 128.2 |
+
+Box 观点：box 第一梯队是 spatial_rel、region、general_obj、OPD final，Acc@0.5 都在 51.3%-51.6%。OPD final 相比 Qwen3-VL-8B-Instruct 从 43.3% 提升到 51.3%，提升约 8.0 个百分点；相比 base 从 40.9% 提升到 51.3%，提升约 10.5 个百分点。
+
+### Point Grounding
+
+| 模型 | n | Format | Coord | Hit@50 | Hit@100 | MinDist | PredToGoldDist | PointCountDiff |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 1400 | 0.0% | 0.0% | 0.0% | 0.0% | - | - | 8.7 |
+| Qwen3-VL-8B-Instruct | 1400 | 0.0% | 0.0% | 0.0% | 0.0% | - | - | 8.7 |
+| General reasoning expert | 1400 | 100.0% | 100.0% | 71.0% | 83.4% | 60.8 | 84.5 | 4.4 |
+| RoboPoint expert | 1400 | 100.0% | 100.0% | 77.6% | 87.9% | 50.2 | 77.7 | 4.6 |
+| General obj expert | 1400 | 100.0% | 100.0% | 69.4% | 82.5% | 63.5 | 85.1 | 4.3 |
+| Region expert | 1400 | 100.0% | 100.0% | 68.4% | 81.5% | 65.1 | 87.2 | 4.1 |
+| Spatial rel expert | 1400 | 100.0% | 100.0% | 66.9% | 81.5% | 65.7 | 88.4 | 4.2 |
+| OPD final | 1400 | 100.0% | 100.0% | 70.9% | 84.1% | 57.6 | 78.0 | 4.6 |
+
+Point 观点：RoboPoint expert 明显最强，Hit@50=77.6%、Hit@100=87.9%。OPD final Hit@100=84.1%，低于 RoboPoint expert，但高于 general_obj、region、spatial_rel expert，说明融合保留了大部分 point 专家能力。
+
+### Text / VQA 通用能力
+
+| 模型 | n | Format | Text exact | Text loose | Bool n | Bool acc | MC n | MC acc |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 2500 | 100.0% | 0.8% | 0.8% | 910 | 0.0% | 107 | 18.7% |
+| Qwen3-VL-8B-Instruct | 2500 | 100.0% | 0.8% | 52.0% | 910 | 81.2% | 107 | 29.0% |
+| General reasoning expert | 2500 | 100.0% | 87.1% | 87.1% | 910 | 89.0% | 107 | 21.5% |
+| RoboPoint expert | 2500 | 100.0% | 85.8% | 85.8% | 910 | 87.5% | 107 | 16.8% |
+| General obj expert | 2500 | 100.0% | 84.6% | 84.6% | 910 | 85.8% | 107 | 24.3% |
+| Region expert | 2500 | 100.0% | 83.0% | 83.0% | 910 | 81.6% | 107 | 20.6% |
+| Spatial rel expert | 2500 | 100.0% | 84.2% | 84.2% | 910 | 85.8% | 107 | 21.5% |
+| OPD final | 2500 | 100.0% | 87.4% | 87.4% | 910 | 90.0% | 107 | 20.6% |
+
+Text 观点：OPD final 的 text loose=87.4%、bool acc=90.0%，为全体最佳。Qwen3-VL-8B-Instruct 的 loose 有 52.0%，但 exact 只有 0.8%，说明它经常输出带选项前缀或解释性文本，和本项目期望的短答案格式不完全一致；expert/OPD 的 exact 与 loose 接近，格式约束更稳定。
+
+## 每个领域的完整指标与分析
+
+### 各领域最佳模型概览
+
+| 领域 | 主指标 | 最佳模型 | 指标值 |
+| --- | --- | --- | ---: |
+| RefCOCO / 指代表达框选 | Acc@0.5 | General obj expert | 83.9% |
+| Flickr30K Entities / 短语实体框选 | Acc@0.5 | General obj expert | 78.3% |
+| Visual Genome Object / 通用物体框选 | Acc@0.5 | Spatial rel expert | 35.5% |
+| Visual Genome Region / 区域描述框选 | Acc@0.5 | Region expert | 41.5% |
+| Visual Genome Relationship / 关系框选 | Acc@0.5 | Region expert | 42.7% |
+| Semantic Nav Box / 语义导航框选 | Acc@0.5 | Spatial rel expert | 34.0% |
+| Grounding point / 点选 | Hit@100 | RoboPoint expert | 87.9% |
+| Keepalive VQA / 通用能力 | Text loose | OPD final | 87.4% |
+
+### RefCOCO / 指代表达框选
+
+| 模型 | n | Format | Coord | IoU | Acc@0.3 | Acc@0.5 | Acc@0.75 | CenterDist |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 1100 | 97.2% | 97.3% | 0.646 | 82.9% | 74.5% | 46.9% | 85.5 |
+| Qwen3-VL-8B-Instruct | 1100 | 99.9% | 99.9% | 0.682 | 88.5% | 80.1% | 54.3% | 70.3 |
+| General reasoning expert | 1100 | 100.0% | 100.0% | 0.729 | 89.1% | 82.9% | 65.9% | 63.3 |
+| RoboPoint expert | 1100 | 100.0% | 100.0% | 0.719 | 87.2% | 81.8% | 64.6% | 67.9 |
+| General obj expert | 1100 | 100.0% | 100.0% | 0.740 | 89.5% | 83.9% | 67.9% | 61.2 |
+| Region expert | 1100 | 100.0% | 100.0% | 0.710 | 87.1% | 81.0% | 63.6% | 69.7 |
+| Spatial rel expert | 1100 | 100.0% | 100.0% | 0.725 | 87.7% | 81.7% | 65.7% | 63.7 |
+| OPD final | 1100 | 100.0% | 100.0% | 0.720 | 87.5% | 82.0% | 64.8% | 65.8 |
+
+解读：最佳为 General obj expert，Acc@0.5=83.9%。OPD final Acc@0.5=82.0%、IoU=0.720，距最佳差 1.9 个百分点，相比 Qwen3-VL-8B-Instruct 提升 1.9 个百分点。RefCOCO 是成熟指代表达框选领域，OPD final 保持在第一梯队。
+
+### Flickr30K Entities / 短语实体框选
+
+| 模型 | n | Format | Coord | IoU | Acc@0.3 | Acc@0.5 | Acc@0.75 | CenterDist |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 900 | 99.6% | 99.6% | 0.553 | 74.3% | 61.2% | 35.0% | 105.8 |
+| Qwen3-VL-8B-Instruct | 900 | 99.9% | 99.9% | 0.591 | 77.4% | 65.7% | 42.3% | 95.8 |
+| General reasoning expert | 900 | 100.0% | 100.0% | 0.608 | 77.1% | 65.9% | 46.4% | 102.4 |
+| RoboPoint expert | 900 | 100.0% | 100.0% | 0.636 | 81.0% | 70.8% | 50.4% | 91.8 |
+| General obj expert | 900 | 100.0% | 100.0% | 0.706 | 86.2% | 78.3% | 59.7% | 68.1 |
+| Region expert | 900 | 100.0% | 100.0% | 0.700 | 86.0% | 78.3% | 59.8% | 66.7 |
+| Spatial rel expert | 900 | 100.0% | 100.0% | 0.693 | 85.6% | 76.4% | 58.2% | 71.9 |
+| OPD final | 900 | 100.0% | 100.0% | 0.701 | 85.7% | 77.6% | 59.4% | 67.7 |
+
+解读：最佳为 General obj expert / Region expert，Acc@0.5=78.3%。OPD final Acc@0.5=77.6%、IoU=0.701，距最佳只差 0.8 个百分点，说明短语实体框选能力在融合后保持很好。
+
+### Visual Genome Object / 通用物体框选
+
+| 模型 | n | Format | Coord | IoU | Acc@0.3 | Acc@0.5 | Acc@0.75 | CenterDist |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 1100 | 99.8% | 99.8% | 0.262 | 37.5% | 25.6% | 11.5% | 197.7 |
+| Qwen3-VL-8B-Instruct | 1100 | 99.2% | 99.2% | 0.288 | 39.5% | 28.5% | 13.6% | 189.4 |
+| General reasoning expert | 1100 | 100.0% | 100.0% | 0.303 | 41.4% | 32.2% | 16.2% | 197.1 |
+| RoboPoint expert | 1100 | 100.0% | 100.0% | 0.311 | 41.7% | 33.0% | 18.3% | 189.5 |
+| General obj expert | 1100 | 100.0% | 100.0% | 0.323 | 42.9% | 34.2% | 19.8% | 184.8 |
+| Region expert | 1100 | 100.0% | 100.0% | 0.318 | 42.6% | 33.0% | 19.0% | 186.3 |
+| Spatial rel expert | 1100 | 100.0% | 100.0% | 0.329 | 44.2% | 35.5% | 20.2% | 185.5 |
+| OPD final | 1100 | 100.0% | 100.0% | 0.325 | 43.5% | 34.4% | 19.8% | 182.3 |
+
+解读：最佳为 Spatial rel expert，Acc@0.5=35.5%。OPD final Acc@0.5=34.4%、IoU=0.325，距最佳差 1.1 个百分点，相比 Qwen3-VL-8B-Instruct 提升 5.9 个百分点。
+
+### Visual Genome Region / 区域描述框选
+
+| 模型 | n | Format | Coord | IoU | Acc@0.3 | Acc@0.5 | Acc@0.75 | CenterDist |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 1100 | 98.5% | 98.5% | 0.315 | 44.7% | 30.3% | 10.5% | 155.7 |
+| Qwen3-VL-8B-Instruct | 1100 | 99.5% | 99.5% | 0.341 | 48.7% | 33.3% | 14.3% | 148.0 |
+| General reasoning expert | 1100 | 100.0% | 100.0% | 0.374 | 53.6% | 38.9% | 18.3% | 145.0 |
+| RoboPoint expert | 1100 | 100.0% | 100.0% | 0.376 | 53.4% | 39.3% | 18.2% | 141.2 |
+| General obj expert | 1100 | 100.0% | 100.0% | 0.381 | 53.9% | 38.9% | 18.5% | 140.7 |
+| Region expert | 1100 | 100.0% | 100.0% | 0.392 | 55.7% | 41.5% | 20.0% | 139.6 |
+| Spatial rel expert | 1100 | 100.0% | 100.0% | 0.384 | 53.5% | 40.5% | 18.3% | 142.1 |
+| OPD final | 1100 | 100.0% | 100.0% | 0.382 | 54.5% | 41.1% | 18.2% | 140.1 |
+
+解读：最佳为 Region expert，Acc@0.5=41.5%。OPD final Acc@0.5=41.1%，只落后约 0.5 个百分点，说明区域描述框选能力在融合后保持良好。
+
+### Visual Genome Relationship / 关系框选
+
+| 模型 | n | Format | Coord | IoU | Acc@0.3 | Acc@0.5 | Acc@0.75 | CenterDist |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 1100 | 98.7% | 98.8% | 0.313 | 42.0% | 31.0% | 16.4% | 175.9 |
+| Qwen3-VL-8B-Instruct | 1100 | 99.5% | 99.5% | 0.354 | 47.9% | 36.4% | 19.7% | 160.8 |
+| General reasoning expert | 1100 | 100.0% | 100.0% | 0.378 | 49.5% | 40.5% | 23.7% | 151.9 |
+| RoboPoint expert | 1100 | 100.0% | 100.0% | 0.381 | 50.0% | 41.2% | 24.8% | 156.4 |
+| General obj expert | 1100 | 100.0% | 100.0% | 0.391 | 51.0% | 42.2% | 25.6% | 151.3 |
+| Region expert | 1100 | 100.0% | 100.0% | 0.400 | 52.6% | 42.7% | 26.3% | 150.0 |
+| Spatial rel expert | 1100 | 100.0% | 100.0% | 0.393 | 51.5% | 41.1% | 27.2% | 152.4 |
+| OPD final | 1100 | 100.0% | 100.0% | 0.390 | 50.9% | 41.2% | 25.6% | 148.2 |
+
+解读：最佳为 Region expert，Acc@0.5=42.7%。OPD final Acc@0.5=41.2%，与 spatial_rel expert 基本持平。关系框选不仅依赖空间关系，也依赖区域描述式定位。
+
+### Semantic Nav Box / 语义导航框选
+
+| 模型 | n | Format | Coord | IoU | Acc@0.3 | Acc@0.5 | Acc@0.75 | CenterDist |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 800 | 100.0% | 100.0% | 0.212 | 30.8% | 20.8% | 3.4% | 204.2 |
+| Qwen3-VL-8B-Instruct | 800 | 99.9% | 99.9% | 0.197 | 29.3% | 11.4% | 0.8% | 179.5 |
+| General reasoning expert | 800 | 100.0% | 100.0% | 0.253 | 36.4% | 25.6% | 4.4% | 174.2 |
+| RoboPoint expert | 800 | 100.0% | 100.0% | 0.291 | 40.9% | 31.9% | 7.0% | 145.6 |
+| General obj expert | 800 | 100.0% | 100.0% | 0.269 | 37.1% | 29.5% | 7.2% | 171.5 |
+| Region expert | 800 | 100.0% | 100.0% | 0.281 | 39.2% | 31.6% | 7.4% | 154.4 |
+| Spatial rel expert | 800 | 100.0% | 100.0% | 0.306 | 42.5% | 34.0% | 7.2% | 140.9 |
+| OPD final | 800 | 100.0% | 100.0% | 0.278 | 38.5% | 31.1% | 6.9% | 153.9 |
+
+解读：最佳为 Spatial rel expert，Acc@0.5=34.0%。OPD final Acc@0.5=31.1%、IoU=0.278。该领域是所有 box 任务中最难的一档：最佳 Acc@0.5 只有 34.0%，明显低于 RefCOCO 的 83.9% 和 Flickr30K 的 78.3%。这说明语义导航里的 `{object_name, relation, anchor_object}` 框选仍是短板，关系理解和目标唯一定位比普通指代表达更难。
+
+### Grounding point / 点选
+
+| 模型 | n | Format | Coord | Hit@50 | Hit@100 | MinDist | PredToGoldDist | PointCountDiff |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 1400 | 0.0% | 0.0% | 0.0% | 0.0% | - | - | 8.7 |
+| Qwen3-VL-8B-Instruct | 1400 | 0.0% | 0.0% | 0.0% | 0.0% | - | - | 8.7 |
+| General reasoning expert | 1400 | 100.0% | 100.0% | 71.0% | 83.4% | 60.8 | 84.5 | 4.4 |
+| RoboPoint expert | 1400 | 100.0% | 100.0% | 77.6% | 87.9% | 50.2 | 77.7 | 4.6 |
+| General obj expert | 1400 | 100.0% | 100.0% | 69.4% | 82.5% | 63.5 | 85.1 | 4.3 |
+| Region expert | 1400 | 100.0% | 100.0% | 68.4% | 81.5% | 65.1 | 87.2 | 4.1 |
+| Spatial rel expert | 1400 | 100.0% | 100.0% | 66.9% | 81.5% | 65.7 | 88.4 | 4.2 |
+| OPD final | 1400 | 100.0% | 100.0% | 70.9% | 84.1% | 57.6 | 78.0 | 4.6 |
+
+解读：最佳为 RoboPoint expert，Hit@100=87.9%；OPD final Hit@100=84.1%，落后 3.8 个百分点。纯 point expert 对点位预测仍有不可替代的专精收益。
+
+### Keepalive VQA / 通用能力
+
+| 模型 | n | Format | Text exact | Text loose | Bool n | Bool acc | MC n | MC acc |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 2500 | 100.0% | 0.8% | 0.8% | 910 | 0.0% | 107 | 18.7% |
+| Qwen3-VL-8B-Instruct | 2500 | 100.0% | 0.8% | 52.0% | 910 | 81.2% | 107 | 29.0% |
+| General reasoning expert | 2500 | 100.0% | 87.1% | 87.1% | 910 | 89.0% | 107 | 21.5% |
+| RoboPoint expert | 2500 | 100.0% | 85.8% | 85.8% | 910 | 87.5% | 107 | 16.8% |
+| General obj expert | 2500 | 100.0% | 84.6% | 84.6% | 910 | 85.8% | 107 | 24.3% |
+| Region expert | 2500 | 100.0% | 83.0% | 83.0% | 910 | 81.6% | 107 | 20.6% |
+| Spatial rel expert | 2500 | 100.0% | 84.2% | 84.2% | 910 | 85.8% | 107 | 21.5% |
+| OPD final | 2500 | 100.0% | 87.4% | 87.4% | 910 | 90.0% | 107 | 20.6% |
+
+解读：最佳为 OPD final，Text loose=87.4%，Bool acc=90.0%。融合后的通用能力没有被领域 grounding 任务压垮。
+
+## OPD Checkpoint 曲线
+
+| Checkpoint | n | Format | Coord | Box IoU | Box Acc@0.5 | Point Hit@50 | Point Hit@100 | Text loose | Bool acc | MC acc |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 500 | 10000 | 100.0% | 100.0% | 0.457 | 50.1% | 65.9% | 79.7% | 87.4% | 89.6% | 21.5% |
+| 1000 | 10000 | 100.0% | 100.0% | 0.465 | 51.2% | 68.6% | 82.9% | 87.3% | 89.8% | 20.6% |
+| 1500 | 10000 | 100.0% | 100.0% | 0.467 | 51.2% | 69.4% | 83.2% | 87.3% | 89.7% | 20.6% |
+| 2000 | 10000 | 100.0% | 100.0% | 0.468 | 51.4% | 71.2% | 83.5% | 87.3% | 89.9% | 20.6% |
+| 2344 | 10000 | 100.0% | 100.0% | 0.468 | 51.3% | 70.9% | 84.1% | 87.4% | 90.0% | 20.6% |
+
+Checkpoint 观点：
+
+- **500 -> 2000 基本单调提升。** Box Acc@0.5 从 50.1% 到 51.4%，Point Hit@100 从 79.7% 到 83.5%，说明 OPD 训练前 2000 step 仍在带来稳定收益。
+- **2000 -> 2344 进入平台期。** Box Acc@0.5 从 51.4% 到 51.3%，几乎不变；Point Hit@100 从 83.5% 到 84.1%，小幅提升；Text loose 从 87.3% 到 87.4%，也基本持平。
+- **若只看 box，checkpoint-2000 略优；若看综合，checkpoint-2344 略稳。** 2000 的 box Acc@0.5=51.4%，略高于 2344 的 51.3%；2344 的 Point Hit@100=84.1%、Bool acc=90.0%，略高于 2000。
+- **不建议回退到 500。** 500 的 point Hit@100=79.7%，比 2344 低 4.4 个百分点；box Acc@0.5 也低 1.2 个百分点。
+
+## 结论与建议
+
+1. **当前推荐最终模型仍是 OPD final/checkpoint-2344。** 数据依据：它在 box 上达到第一梯队（Acc@0.5=51.3%），point 保持较高（Hit@100=84.1%），通用能力最好（Text loose=87.4%、Bool acc=90.0%）。
+2. **如果业务只追求通用 box grounding，可以考虑 spatial_rel 或 region/general_obj expert，但不建议替代 OPD final。** Spatial rel expert box Acc@0.5=51.6%，只比 OPD final 高 0.3 个百分点；但 OPD final 的通用能力和 point 兼容性更完整。
+3. **如果业务强依赖 point，RoboPoint expert 仍是专精上限。** 它 Hit@100=87.9%，比 OPD final 高 3.8 个百分点；但它的 text/VQA 与 box 综合均衡性不如 OPD final。
+4. **semantic-nav box 是下一步最值得优化的短板。** 最佳模型在该领域 Acc@0.5 只有 34.0%，OPD final 只有 31.1%，明显低于 RefCOCO 的 82.0% 和 Flickr30K 的 77.6%。这说明语义导航的关系定位、anchor/object disambiguation、标注一致性仍需要更强数据或更严格清洗。
+5. **OPD 训练已接近收敛平台。** 2000 到 2344 的收益很小，继续训练未必高性价比；下一轮提升更可能来自数据配比、semantic-nav 清洗、hard/boundary 样本设计，而不是单纯延长 step。
+
+## 结果文件索引
+
+| 文件 | 用途 |
+| --- | --- |
+| `report/raw_holdout_eval_8models_20260525/comparison_extended_metrics.json` | 8 模型完整扩展指标，含 by_format/by_pool |
+| `report/raw_holdout_eval_8models_20260525/comparison_summary.json` | 8 模型原始紧凑汇总 |
+| `report/raw_holdout_eval_8models_20260525/opd_ckpt_extended_comparison_with_2344.json` | OPD checkpoint 500/1000/1500/2000/2344 对比 |
+| `report/raw_holdout_eval_8models_20260525/opd_ckpt_comparison_summary.json` | OPD checkpoint 原始紧凑汇总 |
+| `report/raw_holdout_eval_8models_20260525/evalset_summary.json` | 评估集构造、数据池、blocklist、verify 信息 |
+| `report/raw_holdout_eval_8models_20260525/dedupe_audit.json` | post-hoc 去重与训练图片泄漏审计 |
+| 远端 8 模型 run | `/data/msz/point/eval_raw_holdout_v1/runs_8models_20260525_120552` |
+| 远端 OPD ckpt run | `/data/msz/point/eval_raw_holdout_v1/opd_ckpts_20260525_124224` |

@@ -38,6 +38,7 @@ venv/
 
 # Claude config
 .claude/
+.codex_tmp/
 
 # OPD project generated artifacts
 opd_project/outputs/

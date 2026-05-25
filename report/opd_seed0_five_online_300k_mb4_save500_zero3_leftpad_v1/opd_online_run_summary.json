@@ -1,0 +1,77 @@
+{
+  "opd_data_path": "/data/msz/point/opd_student_v1/train_prompts.jsonl",
+  "student_model_name_or_path": "/data/msz/models/8b_base",
+  "teacher_paths": {
+    "general_obj_expert": "/data/msz/models/seed0_general_obj_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+    "region_expert": "/data/msz/models/seed0_region_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+    "robopoint_expert": "/data/msz/models/seed0_robopoint_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+    "spatial_rel_expert": "/data/msz/models/seed0_spatial_rel_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+    "general_reasoning_expert": "/data/msz/models/seed0_general_reasoning_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1"
+  },
+  "teacher_load_mode": "preloaded_zero3",
+  "teacher_deepspeed": "/data/msz/point/configs/zero3_opd_maca.json",
+  "dataset_summary": {
+    "path": "/data/msz/point/opd_student_v1/train_prompts.jsonl",
+    "raw_rows_seen": 300000,
+    "expanded_rows": 300032,
+    "padded_rows": 32,
+    "route_policy": "target",
+    "group_by_route": false,
+    "shuffle_samples": false,
+    "route_block_shuffle": true,
+    "shuffle_seed": 20260520,
+    "route_counts": {
+      "general_obj_expert": 54355,
+      "general_reasoning_expert": 92695,
+      "spatial_rel_expert": 52407,
+      "region_expert": 52512,
+      "robopoint_expert": 48031
+    },
+    "schedule_route_counts": {
+      "general_reasoning_expert": 92704,
+      "general_obj_expert": 54368,
+      "robopoint_expert": 48032,
+      "spatial_rel_expert": 52416,
+      "region_expert": 52512
+    },
+    "sample_category_counts": {
+      "domain": 180438,
+      "general": 74603,
+      "boundary": 30078,
+      "format_conflict": 14881
+    },
+    "expected_format_counts": {
+      "box": 166891,
+      "text": 87724,
+      "point": 45385
+    },
+    "candidate_len_counts": {
+      "1": 269922,
+      "2": 27106,
+      "3": 2972
+    }
+  },
+  "train_loss": 0.3442268627489132,
+  "last_route_id": 4.0,
+  "last_response_tokens": 25.0,
+  "last_opd_loss": 0.16669046878814697,
+  "last_entropy": 0.17483912408351898,
+  "save_steps": 500,
+  "save_total_limit": 5,
+  "save_only_model": false,
+  "teacher_load_counts": {
+    "general_obj_expert": 1,
+    "region_expert": 1,
+    "robopoint_expert": 1,
+    "spatial_rel_expert": 1,
+    "general_reasoning_expert": 1
+  },
+  "route_loss_counts": {
+    "general_reasoning_expert": 11588,
+    "general_obj_expert": 6796,
+    "robopoint_expert": 6004,
+    "spatial_rel_expert": 6552,
+    "region_expert": 6564
+  },
+  "opd_mode": "five_expert_online_teacher_rollout_top1"
+}

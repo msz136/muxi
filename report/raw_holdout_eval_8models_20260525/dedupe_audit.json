@@ -1,0 +1,20 @@
+{
+  "eval_path": "/data/msz/point/eval_raw_holdout_v1/raw_holdout_eval_v1_10k.jsonl",
+  "rows": 10000,
+  "duplicate_fingerprints": 0,
+  "duplicate_source_lines": 0,
+  "duplicate_prompt_answer_image_keys": 0,
+  "unique_images": 8251,
+  "rows_on_repeated_images": 2917,
+  "repeated_image_paths": 1168,
+  "repeated_image_rows_by_pool": {
+    "flickr30k_entities": 172,
+    "grounding_point": 1,
+    "refcoco": 346,
+    "semantic_nav_box": 47,
+    "visual_genome_object": 781,
+    "visual_genome_region": 718,
+    "visual_genome_relationship": 852
+  },
+  "image_seen_in_train_rows": 0
+}
