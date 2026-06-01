@@ -1,0 +1,146 @@
+{
+  "generated_at_local": "2026-05-26T03:15:18.279Z",
+  "train_dir": "C:\\Users\\mousongzhe\\muxi\\report\\opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1",
+  "eval_dir": "C:\\Users\\mousongzhe\\muxi\\report\\raw_holdout_eval_8models_20260525",
+  "out_dir": "C:\\Users\\mousongzhe\\muxi\\report\\opd_300k_analysis_20260526",
+  "train_steps": 2344,
+  "expected_rows": 300032,
+  "raw_rows_seen": 300000,
+  "padded_rows": 32,
+  "train_loss": 0.3442268627489132,
+  "first": {
+    "loss": 4.5744,
+    "grad_norm": 696.7597875573288,
+    "learning_rate": 0,
+    "opd_route_id": 2,
+    "opd_response_tokens": 48,
+    "opd_loss": 2.977684736251831,
+    "entropy": 1.2759050130844116,
+    "opd_entropy": 1.2759050130844116,
+    "epoch": 0,
+    "step": 1
+  },
+  "last": {
+    "loss": 0.1846,
+    "grad_norm": 2.842887765948197,
+    "learning_rate": 4.775741522800025e-13,
+    "opd_route_id": 4,
+    "opd_response_tokens": 25,
+    "opd_loss": 0.16669046878814697,
+    "entropy": 0.17483912408351898,
+    "opd_entropy": 0.17483912408351898,
+    "epoch": 1,
+    "step": 2344
+  },
+  "last_ma50": {
+    "loss": 0.24799800000000044,
+    "opd_loss": 0.2402452523773536,
+    "entropy": 0.24854992963373662,
+    "grad_norm": 3.6139658203436777,
+    "response_tokens": 26.16
+  },
+  "first_ma50": {
+    "loss": 2.4630900000000007,
+    "opd_loss": 2.1473240876197814,
+    "entropy": 0.8765110290050506,
+    "grad_norm": 224.23898351818545
+  },
+  "quantiles": {
+    "loss_p50": 0.2877,
+    "loss_p95": 0.50527,
+    "loss_p99": 2.4814800000000057,
+    "entropy_p50": 0.3222629874944687,
+    "entropy_p95": 0.5993012547492981,
+    "grad_p50": 3.5356075851071207,
+    "grad_p95": 7.980996870690591,
+    "grad_p99": 110.28230313593728,
+    "grad_p99_after100": 9.844000453259177
+  },
+  "minmax": {
+    "loss_min": 0.0679,
+    "loss_max": 5.6432,
+    "opd_loss_min": 0.000015973704648786224,
+    "opd_loss_max": 7.468767166137695,
+    "entropy_min": 0.00021969010413158685,
+    "entropy_max": 2.6425302028656006,
+    "grad_min": 2.0819487273771604,
+    "grad_max": 793.8334602979545
+  },
+  "anomaly_counts": {
+    "nonfinite": {
+      "count": 0,
+      "examples": []
+    },
+    "zero_or_negative_loss": 0,
+    "grad_gt_50_after_warmup100": 1,
+    "loss_gt_2_after_warmup100": 0
+  },
+  "route_loss_counts": {
+    "general_reasoning_expert": 11588,
+    "general_obj_expert": 6796,
+    "robopoint_expert": 6004,
+    "spatial_rel_expert": 6552,
+    "region_expert": 6564
+  },
+  "dataset_summary": {
+    "path": "/data/msz/point/opd_student_v1/train_prompts.jsonl",
+    "raw_rows_seen": 300000,
+    "expanded_rows": 300032,
+    "padded_rows": 32,
+    "route_policy": "target",
+    "group_by_route": false,
+    "shuffle_samples": false,
+    "route_block_shuffle": true,
+    "shuffle_seed": 20260520,
+    "route_counts": {
+      "general_obj_expert": 54355,
+      "general_reasoning_expert": 92695,
+      "spatial_rel_expert": 52407,
+      "region_expert": 52512,
+      "robopoint_expert": 48031
+    },
+    "schedule_route_counts": {
+      "general_reasoning_expert": 92704,
+      "general_obj_expert": 54368,
+      "robopoint_expert": 48032,
+      "spatial_rel_expert": 52416,
+      "region_expert": 52512
+    },
+    "sample_category_counts": {
+      "domain": 180438,
+      "general": 74603,
+      "boundary": 30078,
+      "format_conflict": 14881
+    },
+    "expected_format_counts": {
+      "box": 166891,
+      "text": 87724,
+      "point": 45385
+    },
+    "candidate_len_counts": {
+      "1": 269922,
+      "2": 27106,
+      "3": 2972
+    }
+  },
+  "dedupe": {
+    "eval_path": "/data/msz/point/eval_raw_holdout_v1/raw_holdout_eval_v1_10k.jsonl",
+    "rows": 10000,
+    "duplicate_fingerprints": 0,
+    "duplicate_source_lines": 0,
+    "duplicate_prompt_answer_image_keys": 0,
+    "unique_images": 8251,
+    "rows_on_repeated_images": 2917,
+    "repeated_image_paths": 1168,
+    "repeated_image_rows_by_pool": {
+      "flickr30k_entities": 172,
+      "grounding_point": 1,
+      "refcoco": 346,
+      "semantic_nav_box": 47,
+      "visual_genome_object": 781,
+      "visual_genome_region": 718,
+      "visual_genome_relationship": 852
+    },
+    "image_seen_in_train_rows": 0
+  }
+}

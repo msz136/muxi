@@ -1,0 +1,93 @@
+{
+  "opd_data_path": "/data/msz/point/opd_student_v1/train_prompts.jsonl",
+  "student_model_name_or_path": "/data/msz/models/opd_offpolicy_coldstart500_newexperts_p0p1_fullvocab_maxnew128_prefix64_veto1to0_zero3_mb16_accum1_20260529_105409",
+  "teacher_paths": {
+    "general_obj_expert": "/data/msz/models/seed0_general_obj_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+    "region_expert": "/data/msz/models/seed0_region_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+    "robopoint_expert": "/data/msz/models/seed0_robopoint_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+    "spatial_rel_expert": "/data/msz/models/seed0_spatial_rel_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+    "general_reasoning_expert": "/data/msz/models/seed0_general_reasoning_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1"
+  },
+  "teacher_load_mode": "preloaded_zero3",
+  "teacher_deepspeed": "/data/msz/point/configs/zero3_opd_maca_gradclip5.json",
+  "dataset_summary": {
+    "path": "/data/msz/point/opd_student_v1/train_prompts.jsonl",
+    "raw_rows_seen": 999900,
+    "expanded_rows": 936192,
+    "skipped_expanded_rows": 64000,
+    "padded_rows": 292,
+    "route_policy": "target",
+    "group_by_route": false,
+    "shuffle_samples": false,
+    "route_block_shuffle": true,
+    "shuffle_seed": 20260520,
+    "route_counts": {
+      "general_obj_expert": 179975,
+      "general_reasoning_expert": 309994,
+      "spatial_rel_expert": 174988,
+      "region_expert": 174948,
+      "robopoint_expert": 159995
+    },
+    "schedule_route_counts": {
+      "general_reasoning_expert": 288640,
+      "spatial_rel_expert": 164480,
+      "region_expert": 163840,
+      "robopoint_expert": 150784,
+      "general_obj_expert": 168448
+    },
+    "sample_category_counts": {
+      "domain": 599905,
+      "general": 250000,
+      "boundary": 99998,
+      "format_conflict": 49997
+    },
+    "expected_format_counts": {
+      "box": 555537,
+      "text": 293050,
+      "point": 151313
+    },
+    "candidate_len_counts": {
+      "1": 899902,
+      "2": 89998,
+      "3": 10000
+    }
+  },
+  "skip_expanded_samples": 64000,
+  "train_loss": 0.030612957300711424,
+  "last_route_id": 3.0,
+  "last_response_tokens": 24.0,
+  "last_opd_loss": 0.02152700535953045,
+  "last_entropy": 0.6532474160194397,
+  "last_student_entropy": 0.6837607026100159,
+  "last_teacher_entropy": 0.6532474160194397,
+  "last_opd_loss_tokens": 24.0,
+  "last_opd_veto_beta": 0.0,
+  "last_opd_topk_overlap": 0.7466145753860474,
+  "opd_rollout_source": "student",
+  "opd_max_new_tokens": 64,
+  "opd_prefix_loss_tokens": 64,
+  "opd_veto_beta_start": 1.0,
+  "opd_veto_beta_end": 0.0,
+  "opd_veto_beta_steps": 500,
+  "opd_overlap_top_k": 10,
+  "opd_distill_support": "full_vocab",
+  "opd_distill_top_k": null,
+  "save_steps": 1000,
+  "save_total_limit": 5,
+  "save_only_model": false,
+  "teacher_load_counts": {
+    "general_obj_expert": 1,
+    "region_expert": 1,
+    "robopoint_expert": 1,
+    "spatial_rel_expert": 1,
+    "general_reasoning_expert": 1
+  },
+  "route_loss_counts": {
+    "general_reasoning_expert": 24944,
+    "spatial_rel_expert": 14336,
+    "region_expert": 13648,
+    "robopoint_expert": 12240,
+    "general_obj_expert": 14832
+  },
+  "opd_mode": "five_expert_online_student_rollout_teacher_full_vocab_kl_veto_prefix"
+}

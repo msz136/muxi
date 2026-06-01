@@ -1,0 +1,2 @@
+[run] tag=seed0_300k_mb4_filtered_stdtrainer_maxnorm5_v1 limit=300000 mb=4 max_grad_norm=5.0 base=/data/msz/models/8b_base
+[start] 2026-05-28 15:44:32 expert=general_reasoning_expert mb=4 max_grad_norm=5.0 data=/data/msz/point/data_expert_seed0_v1_shuffled/general_reasoning_expert/train_shuffled_seed20260520.jsonl output=/data/msz/models/seed0_general_reasoning_expert_300k_mb4_filtered_stdtrainer_maxnorm5_v1

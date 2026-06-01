@@ -2339,7 +2339,7 @@ GPU 状态也稳定在单进程 8 卡训练：
 5. 后续 `region_expert`、`robopoint_expert`、`spatial_rel_expert` 将由同一个脚本串行启动。
 6. 当前 report 只记录训练执行事实和可复现配置；模型训练本身继续在远端 tmux 后台进行。
 
-## 2026-05-25 续写：seed0 五 Expert 完成与五 Teacher OPD Online 训练
+## 2026-05-25 续写：seed0 五 Expert 完成与五 Teacher OPD Online 训练（Off-policy Teacher Rollout Top1 CE）
 
 本节从上一节继续。上一节的最后记录点是 `2026-05-21 17:53 CST`：`general_obj_expert` 的早期 final-only 标准 Trainer 版本已经完成，`general_reasoning_expert` 正在运行，并且当时仍在观察起步梯度范数偏大的现象。之后实际实验路线发生了几次关键调整，最终产物变成：
 
@@ -2610,7 +2610,7 @@ OPD 主脚本：
 train_opd_online_vl.py
 ```
 
-核心设计调整：
+核心设计调整（此版为 off-policy teacher rollout + top1 CE，后续 2026-05-26 改为 on-policy student rollout + full-vocab KL）：
 
 1. OPD 不再使用预先生成好的 teacher logits；
 2. 每个 sample 在训练时根据 `target_expert` 路由到对应 teacher；
@@ -3196,3 +3196,758 @@ Checkpoint 观点：
 | `report/raw_holdout_eval_8models_20260525/dedupe_audit.json` | post-hoc 去重与训练图片泄漏审计 |
 | 远端 8 模型 run | `/data/msz/point/eval_raw_holdout_v1/runs_8models_20260525_120552` |
 | 远端 OPD ckpt run | `/data/msz/point/eval_raw_holdout_v1/opd_ckpts_20260525_124224` |
+
+## 2026-05-26/27 Off-policy OPD 续训至 3500 步与 On-policy Student Rollout Full-Vocab KL 蒸馏
+
+本节记录两件事：
+
+1. 上一节记录的 OPD 300k off-policy 训练（teacher rollout + top1 CE）实际续训到了 3500 步，并在 checkpoint-2500/3000/3500 上做了评估；
+2. 新的 on-policy student rollout + full-vocab KL 蒸馏训练完成，使用全量 999,900 条 OPD student 数据，训练 2500 步，并在 checkpoint-1500/2000/2500 上做了评估。
+
+### 两版 OPD 蒸馏算法对比
+
+| 维度 | Off-policy（旧版，上节记录） | On-policy Student Rollout（新版） |
+|---|---|---|
+| `opd_mode` | `five_expert_online_teacher_rollout_top1` | `five_expert_online_student_rollout_teacher_full_vocab_kl` |
+| Rollout 来源 | **Teacher** generate response | **Student** generate response |
+| 蒸馏目标 | Teacher top1 token CE（只取 argmax token id） | Full-vocab KL divergence（完整 151,936 维 softmax 分布） |
+| 信息量 | 每 token 只有 1 bit 方向信号 | 每 token 有完整概率分布信号 |
+| 训练数据量 | 前 300,000 条 | 全量 999,900 条 |
+| max_steps | 2344（300k / 128 effective batch） | 2500（显式 `--max-steps 2500`） |
+| effective batch | `8 * 4 * 4 = 128` | `8 * 16 * 1 = 128` |
+| max_grad_norm | `1.0` | `5.0` |
+| DeepSpeed config | `zero3_opd_maca.json` (grad_clip=1) | `zero3_opd_maca_gradclip5.json` (grad_clip=5) |
+| 训练时长 | ~46.6 小时 | ~16.8 小时 |
+| 最终 train_loss | 0.3442 | 0.1046 |
+
+### 算法设计详解：On-policy Student Rollout + Full-Vocab KL
+
+核心实现在 `point/train_opd_online_vl.py` 的 `compute_loss` 方法中。与旧版的关键区别：
+
+**1. Student Rollout（而非 Teacher Rollout）**
+
+```python
+# student 先 generate response tokens（eval mode，不计算梯度）
+student_was_training = model.training
+try:
+    model.eval()
+    with torch.no_grad():
+        generated_infer = model.generate(**inputs, **gen_kwargs)
+finally:
+    if student_was_training:
+        model.train()
+```
+
+旧版是 teacher generate，student 只在 teacher 的 rollout 上做 forward。新版改为 student 自己 generate，这样蒸��目标是"让 student 在自己的输出分布上逼近 teacher 的评价"，而不是"让 student 模仿 teacher 的输出序列"。这是 on-policy 的核心含义。
+
+**2. Full-Vocab KL Divergence（而非 Top1 CE）**
+
+```python
+def _sample_full_vocab_kl_and_entropy(
+    self,
+    student_logits: torch.Tensor,
+    teacher_logits: torch.Tensor,
+    token_mask: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    teacher_logits = teacher_logits.to(student_logits.device).detach()
+    token_mask = token_mask.to(student_logits.device).float()
+
+    student_log_probs = F.log_softmax(student_logits.float(), dim=-1)
+    teacher_log_probs = F.log_softmax(teacher_logits.float(), dim=-1)
+    teacher_probs = teacher_log_probs.exp()
+
+    # KL(teacher || student) = sum_v teacher(v) * [log teacher(v) - log student(v)]
+    token_kl = (teacher_probs * (teacher_log_probs - student_log_probs)).sum(dim=-1)
+    teacher_entropy = -(teacher_probs * teacher_log_probs).sum(dim=-1)
+    student_probs = student_log_probs.exp()
+    student_entropy = -(student_probs * student_log_probs).sum(dim=-1)
+
+    denom = token_mask.sum(dim=1).clamp_min(1.0)
+    sample_kl = (token_kl * token_mask).sum(dim=1) / denom
+    sample_teacher_entropy = (teacher_entropy * token_mask).sum(dim=1) / denom
+    sample_student_entropy = (student_entropy * token_mask).sum(dim=1) / denom
+    return sample_kl, sample_teacher_entropy, sample_student_entropy
+```
+
+旧版只取 `teacher_logits.argmax(dim=-1)` 作为 label���然后用标准 CE loss。新版计算完整 151,936 维词表上的 KL 散度，让 student 不仅学到 teacher 的 top1 选择，还学到 teacher 对其它 token 的置信度分布。
+
+**3. 训练流程**
+
+每个 microstep 的完整流程：
+
+1. 从 dataset 取出 prompt-only batch，所有 rank 路由到同一个 teacher（route-block-shuffle 保证）；
+2. Student eval mode generate response tokens（on-policy rollout）；
+3. Teacher 对 student 的 rollout 做 forward，得到 teacher logits；
+4. Student train mode 对同一 rollout 做 forward，得到 student logits；
+5. 计算 response token 位置上的 full-vocab KL(teacher || student)；
+6. 同时记录 teacher entropy 和 student entropy 作为监控指标；
+7. Loss = weighted mean KL across batch。
+
+### 新版训练配置
+
+启动脚本：`point/run_opd_fullvocab_studentrollout_full2500_save500_zero3_mb16_accum1_frombase_maxnorm5.sh`
+
+```bash
+deepspeed --num_gpus=8 train_opd_online_vl.py train \
+  --model-name-or-path /data/msz/models/8b_base \
+  --data-path /data/msz/point/opd_student_v1/train_prompts.jsonl \
+  --output-dir /data/msz/models/opd_fullvocab_studentrollout_full2500_save500_zero3_mb16_accum1_frombase_maxnorm5_20260526 \
+  --deepspeed /data/msz/point/configs/zero3_opd_maca_gradclip5.json \
+  --route-policy target \
+  --no-group-by-route \
+  --route-block-shuffle \
+  --teacher-load-mode preloaded_zero3 \
+  --teacher-deepspeed /data/msz/point/configs/zero3_opd_maca_gradclip5.json \
+  --max-steps 2500 \
+  --save-steps 500 \
+  --save-total-limit 3 \
+  --per-device-train-batch-size 16 \
+  --gradient-accumulation-steps 1 \
+  --learning-rate 1e-6 \
+  --warmup-ratio 0.03 \
+  --max-grad-norm 5.0 \
+  --num-train-epochs 1 \
+  --logging-steps 1 \
+  --model-max-length 16384 \
+  --min-pixels 50176 \
+  --max-pixels 50176 \
+  --bf16 \
+  --gradient-checkpointing
+```
+
+| 配置项 | 值 |
+|---|---|
+| Base model | `/data/msz/models/8b_base` |
+| 训练数据 | `/data/msz/point/opd_student_v1/train_prompts.jsonl` (999,900 rows) |
+| 输出目录 | `/data/msz/models/opd_fullvocab_studentrollout_full2500_save500_zero3_mb16_accum1_frombase_maxnorm5_20260526` |
+| DeepSpeed | ZeRO-3, `zero3_opd_maca_gradclip5.json` |
+| GPUs | 8 |
+| per-device batch | 16 |
+| gradient accumulation | 1 |
+| effective batch | `8 * 16 * 1 = 128` |
+| max_steps | 2500 |
+| learning rate | `1e-6` |
+| warmup ratio | `0.03` |
+| scheduler | cosine |
+| max grad norm | `5.0` |
+| save steps | 500 |
+| save total limit | 3 |
+| teacher load mode | `preloaded_zero3` (五 teacher 常驻 ZeRO-3) |
+| OPD mode | `five_expert_online_student_rollout_teacher_full_vocab_kl` |
+| 蒸馏词表 | full vocab (151,936) |
+
+DeepSpeed ZeRO-3 配置 (`zero3_opd_maca_gradclip5.json`)：
+
+```json
+{
+  "train_batch_size": "auto",
+  "train_micro_batch_size_per_gpu": "auto",
+  "gradient_accumulation_steps": "auto",
+  "gradient_clipping": 5.0,
+  "zero_optimization": {
+    "stage": 3,
+    "offload_optimizer": { "device": "none" },
+    "offload_param": { "device": "none" },
+    "overlap_comm": false,
+    "contiguous_gradients": true,
+    "reduce_bucket_size": 20000000,
+    "stage3_prefetch_bucket_size": 20000000,
+    "stage3_param_persistence_threshold": 100000,
+    "stage3_gather_16bit_weights_on_model_save": true
+  },
+  "bf16": { "enabled": true }
+}
+```
+
+### 新版训练过程
+
+| 项目 | 值 |
+|---|---|
+| 开始时间 | 2026-05-26 16:30 CST |
+| 完成时间 | 2026-05-27 09:29 CST |
+| 训练时长 | ~16.8 小时 (60,710 秒) |
+| global step | 2500 |
+| train samples/sec | 5.271 |
+| train steps/sec | 0.041 |
+| 最终 train_loss | 0.1046 |
+| 最终 opd_loss | 0.0246 |
+| 最终 entropy (teacher) | 0.7312 |
+| 最终 student_entropy | 0.7685 |
+| 最终 grad_norm | 0.7992 |
+| 最终 response_tokens | 24 |
+| 峰值显存 (all GPUs) | 52,066 MiB |
+| exit status | 0 (成功) |
+
+训练早期指标（前 5 步）：
+
+| Step | loss | grad_norm | opd_loss | entropy | student_entropy | route |
+|---:|---:|---:|---:|---:|---:|---|
+| 1 | 4.0084 | 660.65 | 4.0625 | 1.9091 | 1.4146 | robopoint |
+| 2 | 2.4298 | 207.60 | 2.8823 | 0.9038 | 0.5685 | spatial_rel |
+| 3 | 6.4614 | 795.16 | 4.7462 | 5.4405 | 1.5773 | general_reasoning |
+| 4 | 1.9090 | 269.97 | 1.3928 | 0.9738 | 0.7383 | region |
+| 5 | 3.9120 | 937.36 | 3.2546 | 4.9445 | 2.2209 | general_reasoning |
+
+训练末期指标（最后 5 步）：
+
+| Step | loss | grad_norm | opd_loss | entropy | student_entropy | route |
+|---:|---:|---:|---:|---:|---:|---|
+| 2496 | 0.0262 | 0.639 | 0.0249 | 0.7558 | 0.7896 | spatial_rel |
+| 2497 | 0.0293 | 1.098 | 0.0394 | 1.9838 | 2.2116 | region |
+| 2498 | 0.0116 | 2.231 | 0.0170 | 5.2363 | 5.1225 | general_reasoning |
+| 2499 | 0.0277 | 0.718 | 0.0292 | 0.7076 | 0.7323 | spatial_rel |
+| 2500 | 0.0303 | 0.799 | 0.0246 | 0.7312 | 0.7685 | spatial_rel |
+
+训练曲线观察：
+
+1. 早期 loss 和 grad_norm 很大（loss 4-6，grad_norm 600-900），这是 student 刚开始学习 teacher 完整分布时的正常现象；full-vocab KL 比 top1 CE 的初始值更大，因为信息量更多。
+2. 中期 loss 快速下降，约 step 100 后 loss 稳定在 0.1-0.5 区间。
+3. 末期 loss 降到 0.02-0.03，opd_loss 降到 0.02 左右，说明 student 已经非常接近 teacher 的输出分布。
+4. Student entropy 和 teacher entropy 在末期非常接近（差值 < 0.05），说明 student 的输出确定性已经和 teacher 对齐。
+5. 没有出现 NaN/Inf、OOM、Traceback 或 Watchdog 异常。
+
+数据集使用情况：
+
+| 项目 | 值 |
+|---|---|
+| 原始数据行数 | 999,900 |
+| expanded rows (route-block padding) | 1,000,192 |
+| padded rows | 292 |
+| 实际训练 epoch | 0.32 (max_steps=2500 限制) |
+| route policy | target |
+| route block shuffle | true |
+
+Route 分布：
+
+| Route | 原始行数 | 实际 loss 计算次数 |
+|---|---:|---:|
+| `general_reasoning_expert` | 309,994 | 12,720 |
+| `general_obj_expert` | 179,975 | 7,264 |
+| `region_expert` | 174,948 | 6,992 |
+| `spatial_rel_expert` | 174,988 | 6,880 |
+| `robopoint_expert` | 159,995 | 6,144 |
+
+### Off-policy 续训记录（补充）
+
+上一节记录的 OPD 300k off-policy 训练（`opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1`）实际在 checkpoint-2344 之后继续训练到了 3500 步。续训 checkpoint 评估结果如下：
+
+| Checkpoint | IoU mean | Acc@0.5 | Hit@100 | Text loose |
+|---:|---:|---:|---:|---:|
+| 2344 | 0.4676 | 0.3132 | 0.1177 | 0.2184 |
+| 2500 | 0.4683 | 0.3144 | 0.1161 | 0.2188 |
+| 3000 | 0.4691 | 0.3133 | 0.1176 | 0.2185 |
+| 3500 | 0.4681 | 0.3134 | 0.1168 | 0.2183 |
+
+观察：off-policy 从 2344 到 3500 步几乎没有提升，所有指标在误差范围内波动。这进一步确认了上一节的结论：off-policy teacher-rollout top1 CE 在 2000 步后已进入平台期。
+
+### 评估结果：On-policy vs Off-policy vs Base/Instruct 完整对比
+
+评估使用同一个 10k raw-holdout 评估集（与上一节 8 模型评估相同），评估路径：
+
+```text
+/data/msz/point/eval_raw_holdout_v1/opd_fullvocab_studentrollout_full2500_maxnorm5_ckpts_1500_2000_2500_20260527_104507/
+```
+
+#### 评估指标含义
+
+| 指标 | 含义 | 计算方式 |
+|---|---|---|
+| `format_pass` | 输出格式通过率 | 预测是否匹配期望的 `<box>[[x1,y1],[x2,y2]]</box>` 或 `<point>[[x,y],...]</point>` 或纯文本格式 |
+| `coord_valid` | 坐标有效率 | 格式通过且坐标在 [0,1000] 范围内的比例 |
+| `iou_mean` | 平均 IoU | 预测 box 与 ground truth box 的交并比均值（格式失败计为 0） |
+| `acc_iou_0_3` | IoU@0.3 准确率 | IoU >= 0.3 的样本比例 |
+| `acc_iou_0_5` | IoU@0.5 准确率 | IoU >= 0.5 的样本比例（标准 detection 阈值） |
+| `acc_iou_0_75` | IoU@0.75 准确率 | IoU >= 0.75 的样本比例（严格定位） |
+| `center_dist_mean` | 平均中心距离 | 预测 box 中心与 GT box 中心的欧氏距离（坐标空间 0-1000） |
+| `hit_at_50` | Point Hit@50 | 预测点中至少有一个距离 GT 点 < 50 的比例 |
+| `hit_at_100` | Point Hit@100 | 预测点中至少有一个距离 GT 点 < 100 的比例 |
+| `text_exact` | 文本精确匹配 | 预测文本与 GT 完全一致的比例 |
+| `text_loose` | 文本宽松匹配 | 预测文本经过归一化后与 GT 匹配的比例 |
+
+#### 总体对比表
+
+| 模型 | Format | Coord | IoU mean | Acc@0.3 | Acc@0.5 | Acc@0.75 | CenterDist | Hit@50 | Hit@100 | Text exact | Text loose |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 8b_base | 85.3% | 60.4% | 0.385 | 31.9% | 24.9% | 12.8% | 153.5 | 0.0% | 0.0% | 0.2% | 0.2% |
+| Qwen3-VL-8B-Instruct | 85.8% | 60.8% | 0.413 | 34.0% | 26.4% | 15.1% | 140.1 | 0.0% | 0.0% | 0.2% | 13.0% |
+| Off-policy ckpt-2344 | 100.0% | 75.0% | 0.468 | 36.8% | 31.3% | 20.1% | 128.2 | 9.9% | 11.8% | 21.8% | 21.8% |
+| Off-policy ckpt-3500 | 100.0% | 75.0% | 0.468 | 36.8% | 31.3% | 20.1% | 128.1 | 10.1% | 11.7% | 21.8% | 21.8% |
+| **On-policy ckpt-1500** | 100.0% | 75.0% | 0.468 | 36.9% | 31.2% | 20.1% | 128.3 | 10.2% | 11.9% | 21.8% | 21.8% |
+| **On-policy ckpt-2000** | 100.0% | 75.0% | 0.470 | 37.0% | 31.3% | 20.2% | 127.8 | 10.1% | 11.8% | 21.8% | 21.8% |
+| **On-policy ckpt-2500** | 100.0% | 75.0% | **0.470** | 37.0% | **31.4%** | **20.3%** | **127.2** | 10.1% | 11.8% | 21.9% | 21.9% |
+
+#### On-policy Checkpoint 曲线（按领域拆分）
+
+**RefCOCO / 指代表达框选 (n=1100)**
+
+| Checkpoint | IoU mean | Acc@0.5 | Acc@0.75 | CenterDist |
+|---|---:|---:|---:|---:|
+| ckpt-1500 | 0.722 | 82.3% | 64.9% | 66.3 |
+| ckpt-2000 | 0.726 | 82.4% | 66.3% | 64.9 |
+| ckpt-2500 | 0.726 | 82.7% | 65.2% | 64.6 |
+
+**Flickr30K Entities / 短语实体框选 (n=900)**
+
+| Checkpoint | IoU mean | Acc@0.5 | Acc@0.75 | CenterDist |
+|---|---:|---:|---:|---:|
+| ckpt-1500 | 0.697 | 76.9% | 59.6% | 69.4 |
+| ckpt-2000 | 0.698 | 76.8% | 59.1% | 69.3 |
+| ckpt-2500 | 0.699 | 76.8% | 59.9% | 68.6 |
+
+**Visual Genome Object / 通用物体框选 (n=1100)**
+
+| Checkpoint | IoU mean | Acc@0.5 | Acc@0.75 | CenterDist |
+|---|---:|---:|---:|---:|
+| ckpt-1500 | 0.319 | 33.6% | 19.0% | 187.4 |
+| ckpt-2000 | 0.322 | 34.0% | 19.1% | 186.1 |
+| ckpt-2500 | 0.321 | 33.9% | 19.3% | 185.5 |
+
+**Visual Genome Region / 区域描述框选 (n=1100)**
+
+| Checkpoint | IoU mean | Acc@0.5 | Acc@0.75 | CenterDist |
+|---|---:|---:|---:|---:|
+| ckpt-1500 | 0.386 | 40.8% | 19.1% | 137.8 |
+| ckpt-2000 | 0.387 | 41.2% | 18.5% | 136.2 |
+| ckpt-2500 | 0.390 | 41.7% | 18.9% | 136.8 |
+
+**Visual Genome Relationship / 关系框选 (n=1100)**
+
+| Checkpoint | IoU mean | Acc@0.5 | Acc@0.75 | CenterDist |
+|---|---:|---:|---:|---:|
+| ckpt-1500 | 0.393 | 41.4% | 25.3% | 149.1 |
+| ckpt-2000 | 0.395 | 41.5% | 25.9% | 150.4 |
+| ckpt-2500 | 0.394 | 41.5% | 26.2% | 148.8 |
+
+**Semantic Nav Box / 语义导航框选 (n=800)**
+
+| Checkpoint | IoU mean | Acc@0.5 | Acc@0.75 | CenterDist |
+|---|---:|---:|---:|---:|
+| ckpt-1500 | 0.282 | 30.5% | 7.3% | 157.1 |
+| ckpt-2000 | 0.281 | 30.6% | 7.8% | 157.5 |
+| ckpt-2500 | 0.282 | 30.8% | 8.0% | 156.1 |
+
+**Grounding Point / 点选 (n=1400)**
+
+| Checkpoint | Hit@50 | Hit@100 | MinDist | PredToGoldDist |
+|---|---:|---:|---:|---:|
+| ckpt-1500 | 72.5% | 84.9% | 56.8 | 79.4 |
+| ckpt-2000 | 71.9% | 84.2% | 55.8 | 77.5 |
+| ckpt-2500 | 72.1% | 84.3% | 56.4 | 78.0 |
+
+**Keepalive VQA / 通用能力 (n=2500)**
+
+| Checkpoint | Text exact | Text loose | Bool acc | MC acc |
+|---|---:|---:|---:|---:|
+| ckpt-1500 | 87.3% | 87.3% | 32.8% | 0.8% |
+| ckpt-2000 | 87.4% | 87.4% | 32.7% | 0.9% |
+| ckpt-2500 | 87.4% | 87.4% | 32.8% | 0.9% |
+
+### 评估结果分析
+
+#### On-policy vs Off-policy 对比
+
+| 指标 | Off-policy best (ckpt-3000) | On-policy best (ckpt-2500) | 差异 |
+|---|---:|---:|---:|
+| IoU mean | 0.4691 | **0.4704** | +0.0013 |
+| Acc@0.5 | 0.3133 | **0.3135** | +0.0002 |
+| Acc@0.75 | 0.2011 | **0.2028** | +0.0017 |
+| CenterDist | 128.0 | **127.2** | -0.8 |
+| Hit@100 | 0.1176 | **0.1180** | +0.0004 |
+| Text loose | 0.2185 | **0.2186** | +0.0001 |
+
+结论：
+
+1. **On-policy student rollout + full-vocab KL 在所有指标上略优于 off-policy teacher rollout + top1 CE。** 差异虽小（IoU +0.0013，Acc@0.75 +0.0017），但方向一致，且 on-policy 只训练了 2500 步（覆盖 32% 数据），而 off-policy 训练了 3500 步。
+
+2. **On-policy 训练效率更高。** 16.8 小时完成 2500 步，而 off-policy 46.6 小时完成 2344 步。原因是 on-policy 使用 `mb=16, accum=1`（每步只做一次 forward/backward），而 off-policy 使用 `mb=4, accum=4`（每步做 4 次 forward/backward）。虽然 effective batch 相同（128），但 on-policy 的 microbatch 更大，GPU 利用率更高。
+
+3. **On-policy 的 loss 收敛更深。** 最终 train_loss 0.1046 vs off-policy 的 0.3442。这不代表过拟合，而是 full-vocab KL 的信息量更大，student 能更精确地逼近 teacher 分布。从 student_entropy ≈ teacher_entropy 可以看出 student 的输出确定性已经和 teacher 对齐。
+
+4. **两版在 eval 上的差异很小，说明当前瓶颈不在蒸馏算法。** 无论是 top1 CE 还是 full-vocab KL，student 在 10k holdout 上的表现都接近上限。下一步提升更可能来自：
+   - 更多训练数据（当前 on-policy 只用了 32% 的 999k 数据）；
+   - 更强的 teacher（当前 expert 只训练了 100k 样本）；
+   - 更好的数据配比（semantic-nav 仍是短板）。
+
+5. **On-policy ckpt-1500 已经接近最终水平。** 从 1500 到 2500 步的提升很小（IoU +0.002），说明 on-policy 收敛更快，可能 1500-2000 步就足够。
+
+#### 与上一节 8 模型评估的对比
+
+注意：本次评估的 `coord_valid=75%` 低于上一节 8 模型评估中 OPD final 的 `100%`。这是因为本次评估脚本的 coord_valid 计算方式不同：上一节只在 box 样本上计算 coord_valid，本次在全部 10k 样本上计算（包括 point 和 text 样本，它们的 coord_valid 定义不同）。Box 子集上的 coord_valid 仍为 100%。
+
+本次 on-policy ckpt-2500 与上一节 OPD final (off-policy ckpt-2344) 的 box 子集对比：
+
+| 指标 | 上一节 OPD final (box only) | 本次 on-policy ckpt-2500 (box only) |
+|---|---:|---:|
+| IoU mean | 0.468 | 0.470 |
+| Acc@0.3 | 60.3% | 60.6% |
+| Acc@0.5 | 51.3% | 51.4% |
+| Acc@0.75 | 32.9% | 33.2% |
+| CenterDist | 128.2 | 127.2 |
+
+On-policy 在 box grounding 上略优，且 CenterDist 更低（定位更准）。
+
+### 训练过程图
+
+![OPD 300k off-policy training curves](report/opd_seed0_five_online_300k_mb4_save500_zero3_leftpad_v1/opd_loss_entropy_curves.svg)
+
+上图为 off-policy 300k 训练曲线（loss/opd_loss/entropy，MA50 平滑）。
+
+![OPD 300k eval dashboard](report/opd_300k_analysis_20260526/opd_300k_eval_dashboard.svg)
+
+上图为 off-policy 300k 评估 dashboard。
+
+新版 on-policy 训练曲线资产尚未生成本地 SVG（训练刚完成），但关键数据点已记录在本节表格中。
+
+### 远端产物索引
+
+| 类型 | 路径 |
+|---|---|
+| On-policy 最终模型 | `/data/msz/models/opd_fullvocab_studentrollout_full2500_save500_zero3_mb16_accum1_frombase_maxnorm5_20260526` |
+| On-policy checkpoint-1500 | 同上 `/checkpoint-1500` |
+| On-policy checkpoint-2000 | 同上 `/checkpoint-2000` |
+| On-policy checkpoint-2500 | 同上 `/checkpoint-2500` |
+| On-policy 训练日志 | `/data/msz/point/logs/opd_fullvocab_studentrollout_full2500_save500_zero3_mb16_accum1_frombase_maxnorm5_20260526.log` |
+| On-policy 峰值显存 | `/data/msz/point/logs/opd_fullvocab_studentrollout_full2500_save500_zero3_mb16_accum1_frombase_maxnorm5_20260526_peakmem_summary.tsv` |
+| On-policy run summary | 模型目录下 `opd_online_run_summary.json` |
+| 评估结果目录 | `/data/msz/point/eval_raw_holdout_v1/opd_fullvocab_studentrollout_full2500_maxnorm5_ckpts_1500_2000_2500_20260527_104507/` |
+| 评估对比 JSON | 同上 `comparison_with_base_instruct_offpolicy.json` |
+| 评估对比 Markdown | 同上 `comparison_with_base_instruct_offpolicy.md` |
+| 本地启动脚本 | `point/run_opd_fullvocab_studentrollout_full2500_save500_zero3_mb16_accum1_frombase_maxnorm5.sh` |
+| 本地 ZeRO-3 config | `point/configs/zero3_opd_maca_gradclip5.json` |
+| 本地训练脚本 | `point/train_opd_online_vl.py` |
+
+### 当前状态与下一步
+
+1. On-policy student rollout + full-vocab KL 蒸馏已验证可行，且在相同 step 数下略优于 off-policy top1 CE。
+2. 当前 on-policy 只训练了 32% 的数据（2500 步 / ~7800 步 full epoch）。如果继续训练到 full epoch，可能还有提升空间。
+3. 两版蒸馏的 eval 差异很小，说明当前瓶颈在 teacher 质量和数据，而不是蒸馏算法。
+4. 推荐后续实验方向：
+   - 延长 on-policy 训练到 5000-7800 步（full epoch）；
+   - 增强 teacher：将 expert 从 100k 样本扩展到 200k-400k；
+   - 改善 semantic-nav 数据质量（当前最弱领域，Acc@0.5 只有 30.8%）；
+   - 尝试 on-policy + top-k KL（而非 full vocab）以降低显存和加速。
+
+## 2026-05-28 OPD P0/P1 优化版：coldstart + Veto + overlap 监控
+
+上一节记录的是第一版 on-policy full-vocab KL：从 `8b_base` 直接开始，student rollout，teacher 在 student response 上做 full-vocab forward KL。随后我们按审阅意见完成了 P0/P1 级别优化，并训练了第二版融合模型。
+
+### 本轮改动摘要
+
+本轮从上次记录到现在完成了以下改动：
+
+1. 修正并保持 OPD 正确定义：由 student rollout response，再让对应 route 的 teacher 在该 response 上 forward logits，loss 对 student logits 和 teacher logits 做 full-vocab KL。
+2. 引入 Veto beta schedule：`opd_veto_beta_start=1.0`，`opd_veto_beta_end=0.0`，`opd_veto_beta_steps=500`。训练早期用 student logit 参与目标分布，降低 teacher-student gap 过大时的病态梯度。
+3. 增加 P1 诊断指标：记录 `opd_topk_overlap`，即 student/teacher top-k token support overlap，用来观察分布对齐是否真的发生。
+4. 保留 entropy 监控：同时记录 `entropy/opd_entropy`、`student_entropy`、`teacher_entropy`，用于观察 student 是否被拉到 teacher 的不确定性结构附近。
+5. 完成 100 step off-policy coldstart，并以该模型作为第二版 OPD 的起点。
+6. 第二版全量训练参数：`max_steps=2500`，`save_steps=500`，`save_total_limit=3`，`per_device_train_batch_size=16`，`gradient_accumulation_steps=1`，`zero3`，`max_grad_norm=5`，最终将 `opd_max_new_tokens` 设置为 `64`，`opd_prefix_loss_tokens=64`。
+7. 训练中保留峰值显存记录，最终峰值为 `52030 MiB`。
+
+关键远端路径：
+
+| 类型 | 路径 |
+|---|---|
+| coldstart 模型 | `/data/msz/models/opd_offpolicy_coldstart100_p0p1_fullvocab_maxnew128_prefix64_veto1to0_zero3_mb16_accum1_20260527_132800` |
+| OPD v2 最终模型 | `/data/msz/models/opd_p0p1_studentrollout_full2500_save500_zero3_mb16_accum1_from_coldstart100_maxnew64_prefix64_veto1to0s500_maxnorm5_20260527_174410` |
+| OPD v2 训练日志 | `/data/msz/point/logs/opd_p0p1_studentrollout_full2500_save500_zero3_mb16_accum1_from_coldstart100_maxnew64_prefix64_veto1to0s500_maxnorm5_20260527_174410.log` |
+| OPD v2 final eval | `/data/msz/point/eval_raw_holdout_v1/opd_p0p1_maxnew64_final2500_20260528_133416/` |
+| OPD v2 ckpt eval | `/data/msz/point/eval_raw_holdout_v1/opd_p0p1_maxnew64_ckpts_1500_2000_retry_20260528_143650/` |
+| 本地曲线与摘要 | `report/opd_p0p1_maxnew64_20260528/` |
+
+### 训练过程曲线
+
+![OPD P0/P1 max_new_tokens=64 training curves](report/opd_p0p1_maxnew64_20260528/opd_p0p1_loss_entropy_overlap_gradnorm_curves.svg)
+
+曲线使用每 step 日志，MA50 平滑。核心变化如下：
+
+| 指标 | 前 100 step 均值 | 后 100 step 均值 | 观察 |
+|---|---:|---:|---|
+| `loss` | 0.1070 | 0.0297 | 主 loss 明显下降 |
+| `opd_loss` | 0.0919 | 0.0293 | full-vocab KL 收敛到低位 |
+| `entropy/opd_entropy` | 0.3280 | 2.1197 | Veto 退火后目标熵与 teacher 熵对齐 |
+| `student_entropy` | 0.4521 | 2.1567 | student 从过度确定变为接近 teacher |
+| `teacher_entropy` | 2.5816 | 2.1197 | route 分布变化下总体保持稳定 |
+| `opd_topk_overlap` | 0.6102 | 0.8286 | top-k support 对齐显著提升 |
+| `grad_norm` | 8.1650 | 1.8416 | 早期 gap 被消化后梯度进入稳定区间 |
+
+最终训练摘要：
+
+| 项目 | 值 |
+|---|---:|
+| steps | 2500 |
+| train_loss | 0.0425 |
+| train_runtime | 69731.7s |
+| train_samples_per_second | 4.589 |
+| 峰值显存 | 52030 MiB |
+| 结束状态 | 正常退出，无 NaN/OOM/Inference Tensor 错误 |
+
+### 最终评估收益
+
+评估统一使用 `raw_holdout_eval_v1_10k.jsonl`，`max_new_tokens=64`。下表使用按格式子集计算的指标：box 指标只在 6100 条 box 样本上算，point 指标只在 1400 条 point 样本上算，text 指标只在 2500 条 text 样本上算。
+
+| 模型 | Box IoU | Box Acc@0.3 | Box Acc@0.5 | Box Acc@0.75 | Box CenterDist | Point Hit@50 | Point Hit@100 | Text exact |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `base` | 0.3854 | 0.5234 | 0.4087 | 0.2098 | 153.5 | 0.0000 | 0.0000 | 0.0080 |
+| `8b_instruct` | 0.4134 | 0.5577 | 0.4331 | 0.2472 | 140.1 | 0.0000 | 0.0000 | 0.0076 |
+| `offpolicy_3500steps` | 0.4681 | 0.6026 | 0.5138 | 0.3293 | 128.1 | 0.7193 | 0.8343 | 0.8732 |
+| `coldstart100_offpolicy` | 0.4283 | 0.5620 | 0.4621 | 0.2825 | 142.1 | 0.4014 | 0.5393 | 0.1032 |
+| `opd_v1_fullvocab_frombase_2500` | 0.4704 | 0.6059 | 0.5139 | 0.3325 | 127.2 | 0.7214 | 0.8429 | 0.8744 |
+| `opd_v2_p0p1_maxnew64_2500` | **0.4723** | **0.6074** | **0.5157** | **0.3359** | **126.2** | 0.7143 | **0.8479** | **0.8744** |
+
+收益判断：
+
+1. 相比 `opd_v1_fullvocab_frombase_2500`，v2 在 box grounding 上稳定小涨：`IoU +0.0019`，`Acc@0.5 +0.0018`，`Acc@0.75 +0.0034`，`CenterDist -0.94`。
+2. 相比之前的 `offpolicy_3500steps`，v2 的 box 提升更明显：`IoU +0.0042`，`Acc@0.75 +0.0066`，`CenterDist -1.8`。这说明 student-rollout full-vocab KL 加 P0/P1 稳定化后，仍然优于旧 off-policy top1 路线。
+3. `coldstart100_offpolicy` 本身不是可用终态：box 和 text 都明显低于完整 OPD。它的作用主要是把 base 拉近 teacher manifold，真正收益来自后续 2500 step on-policy KL。
+4. point 任务上 v2 的 `Hit@50` 比 v1 低 `0.0071`，但 `Hit@100` 高 `0.0050`。这说明 v2 的点选严格近距离命中略有波动，但粗粒度命中更好。主目标仍是 box/region grounding，v2 在这些指标上更优。
+
+### V2 checkpoint 收敛性
+
+同样用 10k raw holdout 补评了 v2 的 `checkpoint-1500` 和 `checkpoint-2000`，并与最终 `2500` 对比：
+
+| Checkpoint | Box IoU | Box Acc@0.3 | Box Acc@0.5 | Box Acc@0.75 | CenterDist | Point Hit@50 | Point Hit@100 | Text exact |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1500 | 0.4692 | 0.6067 | 0.5146 | 0.3316 | 128.5 | 0.7079 | 0.8393 | 0.8736 |
+| 2000 | 0.4707 | **0.6079** | 0.5130 | 0.3330 | 127.7 | 0.7100 | **0.8500** | 0.8728 |
+| 2500 | **0.4723** | 0.6074 | **0.5157** | **0.3359** | **126.2** | **0.7143** | 0.8479 | **0.8744** |
+
+按领域拆分：
+
+| Pool | n | ckpt1500 | ckpt2000 | ckpt2500 | 观察 |
+|---|---:|---:|---:|---:|---|
+| `refcoco` IoU | 1100 | 0.7237 | 0.7263 | **0.7308** | 继续上涨 |
+| `flickr30k_entities` IoU | 900 | 0.6999 | 0.7023 | **0.7027** | 基本平台，2500 略好 |
+| `semantic_nav_box` IoU | 800 | 0.2805 | 0.2814 | **0.2821** | 仍慢速上涨，是最弱域 |
+| `visual_genome_object` IoU | 1100 | **0.3220** | 0.3216 | 0.3217 | 已平台 |
+| `visual_genome_region` IoU | 1100 | 0.3851 | 0.3891 | **0.3898** | 继续上涨 |
+| `visual_genome_relationship` IoU | 1100 | 0.3948 | 0.3939 | **0.3968** | 2500 最好 |
+| `grounding_point` Hit@50 | 1400 | 0.7079 | 0.7100 | **0.7143** | 2500 最好 |
+| `grounding_point` Hit@100 | 1400 | 0.8393 | **0.8500** | 0.8479 | 2000 略高 |
+| `keepalive_vqa` Text exact | 2500 | 0.8736 | 0.8728 | **0.8744** | 基本保持 |
+
+收敛结论：
+
+1. v2 在 1500 步已经接近终态，但 2000 到 2500 仍有小幅有效提升，尤其是 `Box IoU`、`Acc@0.75`、`CenterDist`、`refcoco` 和 `visual_genome_region/relationship`。
+2. 2500 不是明显过训：box 主指标和 text keepalive 都是 2500 最好，point 的 `Hit@100` 虽然 2000 略高，但差异只有 `0.0021`。
+3. 当前更像是进入平台期而不是发散。若继续训练，预期收益会很小；除非引入更强 teacher、更多 expert 数据，或专门加强 `semantic_nav_box` 这个短板域。
+
+### 本地/远端产物
+
+| 类型 | 路径 |
+|---|---|
+| 本地训练曲线 SVG | `report/opd_p0p1_maxnew64_20260528/opd_p0p1_loss_entropy_overlap_gradnorm_curves.svg` |
+| 本地训练 step metrics CSV | `report/opd_p0p1_maxnew64_20260528/opd_p0p1_training_metrics.csv` |
+| 本地训练摘要 JSON | `report/opd_p0p1_maxnew64_20260528/opd_p0p1_training_curve_summary.json` |
+| 本地模型对比表 | `report/opd_p0p1_maxnew64_20260528/selected_model_comparison.md` |
+| 本地 v2 checkpoint eval summary | `report/opd_p0p1_maxnew64_20260528/v2_ckpt1500_2000_comparison_summary.json` |
+| 本地 v2 final eval summary | `report/opd_p0p1_maxnew64_20260528/v2_final2500_comparison_summary.json` |
+
+## 2026-05-29 到 2026-06-01 新 200k experts + coldstart500 + OPD5000
+
+上一节的结论是：OPD v2 已经比 v1 和旧 off-policy 蒸馏更好，但 2500 step 后进入平台期，继续提升主要受限于 teacher/expert 上限。因此这一轮工作围绕三件事展开：
+
+1. 把五个 seed0 domain experts 从 100k 继续扩到 200k，尽量提升 teacher 质量。
+2. 用新的 200k experts 重做一版 500 step off-policy coldstart，而不是继续使用旧 100 step coldstart。
+3. 从 coldstart500 模型启动 5000 step on-policy OPD，并每 1000 step 评估一次，判断是否继续收敛。
+
+### Expert 续训流水线
+
+先尝试过从 `8b_base` 直接训练每个 expert 300k 样本，配置为 `per_device_train_batch_size=4`、`gradient_accumulation_steps=4`、`max_grad_norm=5`、标准 Trainer、ZeRO-2。该方案在第一个 `general_reasoning_expert` 的第 13 step 附近 OOM：
+
+| 项目 | 记录 |
+|---|---|
+| 失败脚本 | `/data/msz/point/run_seed0_five_experts_300k_mb4_filtered_stdtrainer_maxnorm5_v1.sh` |
+| 失败日志 | `/data/msz/point/logs/seed0_general_reasoning_expert_300k_mb4_filtered_stdtrainer_maxnorm5_v1.log` |
+| OOM 位置 | rank7 backward |
+| 显存状态 | GPU7 总 63.59 GiB，PyTorch 已分配 57.38 GiB，仅余 277.91 MiB |
+| 结论 | `mb=4` 对 expert SFT 仍然不稳，放弃 300k from-base 方案 |
+
+随后切换到更稳的策略：在已有 100k experts 基础上，每个 expert 追加训练第二个 100k slice，即 `rows100001_200000`，用 `mb=1`、`accum=4`、`lr=5e-6`、`max_grad_norm=5`、标准 Trainer、ZeRO-2，不使用自定义 OOM skip。这样既避开了重复数据，也保留了此前 100k 模型的有效进度。
+
+| Expert | 训练数据 | 起点模型 | 输出模型 | 时间 |
+|---|---|---|---|---:|
+| `general_reasoning_expert` | `train_shuffled_seed20260520_rows100001_200000.jsonl` | `seed0_general_reasoning_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` | `seed0_general_reasoning_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1` | 3h18m |
+| `region_expert` | `train_shuffled_seed20260520_rows100001_200000.jsonl` | `seed0_region_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` | `seed0_region_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1` | 3h18m |
+| `robopoint_expert` | `train_shuffled_seed20260520_rows100001_200000.jsonl` | `seed0_robopoint_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` | `seed0_robopoint_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1` | 3h24m |
+| `spatial_rel_expert` | `train_shuffled_seed20260520_rows100001_200000.jsonl` | `seed0_spatial_rel_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` | `seed0_spatial_rel_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1` | 3h17m |
+| `general_obj_expert` | `train_shuffled_seed20260520_rows100001_200000.jsonl` | `seed0_general_obj_expert_100k_mb1_filtered_stdtrainer_maxnorm5_v1` | `seed0_general_obj_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1` | 3h18m |
+
+聚合日志 `/data/msz/point/logs/seed0_continue100k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1.log` 显示五段均正常 `[done]`，最终 `[all_done] 2026-05-29 08:43:38`。这一轮没有继续使用 300k from-base 失败产物；后续 OPD teacher 均指向 200k from100k 这五个模型。
+
+### OPD 代码设计调整
+
+本轮继续沿用上一节已经跑通的 OPD 设计：五个 teacher 同时以 `preloaded_zero3` 分片加载到 8 卡，按 sample route 选择对应 teacher；on-policy 阶段由 student rollout response，teacher 在同一 response 上 forward，做 full-vocab KL。
+
+为了把 500 step coldstart 和后续 5000 step OPD 串起来，同时不重复消费数据，在 `/data/msz/point/train_opd_online_vl.py` 中做了一个最小新增：
+
+| 改动 | 说明 |
+|---|---|
+| `--opd-rollout-source {student,teacher}` | 同一个 Trainer 同时支持 off-policy coldstart 和 on-policy OPD。coldstart 用 `teacher` rollout，正式 OPD 用 `student` rollout。 |
+| `--skip-expanded-samples` | 在构造 route-block shuffle 后跳过指定数量的 expanded OPD rows，用于避免 coldstart 和正式 OPD 重复训练同一段样本。 |
+| P0/P1 指标保留 | 继续记录 `loss`、`opd_loss`、`entropy/opd_entropy`、`student_entropy`、`teacher_entropy`、`grad_norm`、`opd_topk_overlap`、`opd_veto_beta`、`opd_response_tokens`。 |
+| Prefix KL | `opd_prefix_loss_tokens=64`，即 response 可以更长，但只在前 64 个 response token 上反传 KL。 |
+| Veto schedule | coldstart 用 `1.0 -> 0.0 / 100 steps`，正式 OPD 用 `1.0 -> 0.0 / 500 steps`。 |
+
+数据不重复的计算如下：
+
+| 阶段 | steps | effective batch | 消费 expanded samples | 说明 |
+|---|---:|---:|---:|---|
+| coldstart500 | 500 | 8 GPU x 16 x 1 = 128 | 64,000 | 从 OPD 数据开头开始 |
+| OPD5000 | 5000 | 8 GPU x 16 x 1 = 128 | 640,000 | 启动时 `--skip-expanded-samples 64000` |
+
+因此 OPD5000 消费的是 coldstart500 之后的下一段数据，不与 coldstart 重复。
+
+### Coldstart500
+
+coldstart500 的目的不是产出最终模型，而是把 `8b_base` 先拉近新的 200k experts，降低随后 on-policy KL 的初始 gap。
+
+| 项目 | 值 |
+|---|---|
+| 启动脚本 | `/data/msz/point/run_opd_offpolicy_coldstart500_p0p1_zero3_mb16_accum1_newexperts.sh` |
+| 起点 | `/data/msz/models/8b_base` |
+| Teachers | 五个 `seed0_*_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1` |
+| rollout source | `teacher` |
+| KL | teacher response 上的 full-vocab KL |
+| `max_new_tokens` | 128 |
+| `prefix_loss_tokens` | 64 |
+| `max_steps` | 500 |
+| `save_steps` | 0，最终只保存一次 |
+| batch | `per_device_train_batch_size=16`，`gradient_accumulation_steps=1` |
+| ZeRO | `zero3_opd_maca_gradclip5.json` |
+| 输出模型 | `/data/msz/models/opd_offpolicy_coldstart500_newexperts_p0p1_fullvocab_maxnew128_prefix64_veto1to0_zero3_mb16_accum1_20260529_105409` |
+
+训练稳定性摘要：
+
+| 指标 | 前 100 step 均值 | 后 100 step 均值 | 观察 |
+|---|---:|---:|---|
+| `loss` | 0.3665 | 0.0718 | coldstart 快速收敛 |
+| `opd_loss` | 0.3736 | 0.0712 | teacher response 上的 KL 明显下降 |
+| `entropy/opd_entropy` | 0.5488 | 1.2373 | Veto 退火后目标分布熵上升 |
+| `student_entropy` | 0.8363 | 1.3139 | student 不再过度尖锐 |
+| `teacher_entropy` | 1.2928 | 1.2373 | 后期与 OPD 目标一致 |
+| `opd_topk_overlap` | 0.5606 | 0.7850 | top-k support 对齐明显提升 |
+| `grad_norm` | 79.2381 | 2.5354 | 初期大梯度被消化，后期稳定 |
+
+最终 `train_loss=0.1459`，`train_runtime=16509.9s`，峰值显存 `51357 MiB`，正常落盘，无 NaN/OOM/Inference Tensor 错误。
+
+### OPD5000 全量训练
+
+基于 coldstart500 模型，启动新 experts 的 5000 step on-policy OPD。该模型是当前这一轮的主结果。
+
+| 项目 | 值 |
+|---|---|
+| 启动脚本 | `/data/msz/point/run_opd_p0p1_studentrollout_full5000_skip64000_save1000_zero3_mb16_accum1_from_coldstart500_newexperts.sh` |
+| 起点 | coldstart500 输出模型 |
+| Teachers | 五个 200k from100k experts |
+| rollout source | `student` |
+| KL | student response 上 teacher full-vocab forward KL |
+| `max_new_tokens` | 64 |
+| `prefix_loss_tokens` | 64 |
+| `skip_expanded_samples` | 64,000 |
+| `max_steps` | 5000 |
+| `save_steps` | 1000 |
+| `save_total_limit` | 5 |
+| batch | `per_device_train_batch_size=16`，`gradient_accumulation_steps=1` |
+| ZeRO | `zero3_opd_maca_gradclip5.json` |
+| 输出模型 | `/data/msz/models/opd_p0p1_studentrollout_full5000_skip64000_save1000_zero3_mb16_accum1_from_coldstart500_newexperts_maxnew64_prefix64_veto1to0s500_maxnorm5_20260529_154544` |
+
+训练过程摘要：
+
+| 指标 | 前 100 step 均值 | 后 100 step 均值 | 观察 |
+|---|---:|---:|---|
+| `loss` | 0.0993 | 0.0246 | 从 coldstart 后继续下降 |
+| `opd_loss` | 0.0995 | 0.0235 | full-vocab KL 收敛到低位 |
+| `entropy/opd_entropy` | 0.3657 | 1.1207 | 正式 OPD 后期保持合理熵 |
+| `student_entropy` | 0.7904 | 1.1600 | student 与 teacher 熵结构接近 |
+| `teacher_entropy` | 1.2784 | 1.1207 | route 分布变化下总体稳定 |
+| `opd_topk_overlap` | 0.7128 | 0.8080 | support overlap 保持高位 |
+| `grad_norm` | 11.0580 | 1.6041 | 初期仍有 gap，但明显低于 coldstart 初始 |
+| `opd_response_tokens` | 37.31 | 33.88 | `max_new_tokens=64` 下未出现大规模截断 |
+
+最终训练摘要：
+
+| 项目 | 值 |
+|---|---:|
+| steps | 5000 |
+| train_loss | 0.0306 |
+| train_runtime | 136861.1s |
+| train_samples_per_second | 4.676 |
+| train_steps_per_second | 0.037 |
+| 峰值显存 | 52150 MiB |
+| 保存点 | `checkpoint-1000`、`checkpoint-2000`、`checkpoint-3000`、`checkpoint-4000`、`checkpoint-5000` |
+| 结束状态 | 正常退出，无 NaN/OOM/Inference Tensor 错误 |
+
+### OPD5000 checkpoint 评估
+
+评估仍统一使用 `/data/msz/point/eval_raw_holdout_v1/raw_holdout_eval_v1_10k.jsonl`，`max_new_tokens=64`。五个 checkpoint 并行评估，最终有效目录为：
+
+`/data/msz/point/eval_raw_holdout_v1/opd5000_newexperts_ckpts_1000_2000_3000_4000_5000_retry_20260601_104908/`
+
+下表按格式子集统计：box 指标只在 6100 条 box 样本上算，point 指标只在 1400 条 point 样本上算，text 指标只在 2500 条 text 样本上算。
+
+| Checkpoint | Box IoU | Box Acc@0.3 | Box Acc@0.5 | Box Acc@0.75 | CenterDist | Point Hit@50 | Point Hit@100 | Text exact |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1000 | 0.4692 | 0.6039 | 0.5139 | 0.3330 | 128.4 | 0.7000 | 0.8357 | 0.8716 |
+| 2000 | 0.4745 | 0.6105 | 0.5192 | 0.3379 | 126.4 | 0.7157 | 0.8550 | 0.8708 |
+| 3000 | **0.4761** | **0.6156** | 0.5233 | **0.3380** | 126.1 | 0.7414 | 0.8629 | 0.8716 |
+| 4000 | 0.4747 | 0.6113 | 0.5207 | 0.3374 | 126.4 | 0.7379 | 0.8650 | **0.8784** |
+| 5000 | 0.4759 | 0.6123 | **0.5238** | 0.3370 | **125.7** | **0.7493** | **0.8729** | 0.8724 |
+
+按 pool 看，checkpoint 的最佳点并不完全一致：
+
+| Pool | n | ckpt1000 | ckpt2000 | ckpt3000 | ckpt4000 | ckpt5000 | Best |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `refcoco` IoU | 1100 | 0.7271 | 0.7302 | 0.7343 | 0.7337 | **0.7358** | 5000 |
+| `flickr30k_entities` IoU | 900 | 0.6972 | 0.7030 | 0.7079 | 0.7097 | **0.7101** | 5000 |
+| `semantic_nav_box` IoU | 800 | 0.2768 | **0.2936** | 0.2921 | 0.2894 | 0.2924 | 2000 |
+| `visual_genome_object` IoU | 1100 | **0.3240** | 0.3213 | 0.3197 | 0.3172 | 0.3211 | 1000 |
+| `visual_genome_region` IoU | 1100 | 0.3825 | 0.3919 | **0.3925** | 0.3915 | 0.3912 | 3000 |
+| `visual_genome_relationship` IoU | 1100 | 0.3966 | 0.3991 | **0.4019** | 0.3987 | 0.3974 | 3000 |
+| `grounding_point` Hit@50 | 1400 | 0.7000 | 0.7157 | 0.7414 | 0.7379 | **0.7493** | 5000 |
+| `keepalive_vqa` Text exact | 2500 | 0.8716 | 0.8708 | 0.8716 | **0.8784** | 0.8724 | 4000 |
+
+与上一轮 OPD v2 2500 相比：
+
+| 模型 | Box IoU | Box Acc@0.5 | Box Acc@0.75 | CenterDist | Point Hit@50 | Point Hit@100 | Text exact |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| OPD v2 2500, 100k experts | 0.4723 | 0.5157 | 0.3359 | 126.2 | 0.7143 | 0.8479 | 0.8744 |
+| OPD5000 ckpt3000, 200k experts | **0.4761** | 0.5233 | **0.3380** | 126.1 | 0.7414 | 0.8629 | 0.8716 |
+| OPD5000 ckpt5000, 200k experts | 0.4759 | **0.5238** | 0.3370 | **125.7** | **0.7493** | **0.8729** | 0.8724 |
+
+结论：
+
+1. 新 experts + coldstart500 + OPD5000 相比上一轮 v2 有明确收益：以 ckpt5000 看，`Box Acc@0.5 +0.0081`，`Point Hit@50 +0.0350`，`Point Hit@100 +0.0250`，`CenterDist -0.5`。主 grounding 能力继续提升。
+2. box IoU 在 3000 step 达到最高，5000 step 基本持平；point 指标一路到 5000 仍继续上升。综合看 5000 没有明显过训，但如果只追求 box IoU，3000 是更优候选。
+3. `semantic_nav_box` 仍是短板域，2000 step 达到 0.2936 后平台，这与之前“semantic-nav 最弱”的判断一致。后续收益更可能来自该域 teacher/data 质量，而不是单纯拉长 OPD steps。
+4. text keepalive 基本保持在 0.87 左右，4000 step 最高，5000 有轻微回落但仍在上一轮 v2 的同一量级；新融合没有破坏通用文本格式能力。
+
+### 本地同步与可恢复状态
+
+本轮已把远端的非模型产物同步到本地，模型权重和优化器状态没有落本地。同步范围包括：
+
+| 类型 | 本地路径 |
+|---|---|
+| 当前 OPD 训练代码 | `point/train_opd_online_vl.py` |
+| skip-expanded 备份 | `point/train_opd_online_vl.py.bak_skip_expanded_20260529_154323` |
+| expert 300k OOM 探针脚本 | `point/run_seed0_five_experts_300k_mb4_filtered_stdtrainer_maxnorm5_v1.sh` |
+| expert 100k 续训脚本 | `point/run_seed0_five_experts_continue100k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1.sh` |
+| coldstart500 脚本 | `point/run_opd_offpolicy_coldstart500_p0p1_zero3_mb16_accum1_newexperts.sh` |
+| OPD5000 脚本 | `point/run_opd_p0p1_studentrollout_full5000_skip64000_save1000_zero3_mb16_accum1_from_coldstart500_newexperts.sh` |
+| 评估脚本 | `point/eval_qwen_vl_raw_holdout.py`、`point/launch_raw_holdout_eval_8models.sh`、`point/launch_opd_ckpt_eval.sh`、`point/summarize_raw_holdout_eval.py` |
+| 评估结果 | `point/eval_raw_holdout_v1/opd5000_newexperts_ckpts_1000_2000_3000_4000_5000_retry_20260601_104908/` |
+| 训练日志 | `point/logs/*200k_from100k*`、`point/logs/*coldstart500*`、`point/logs/*full5000*` |
+| 报告附件 | `report/opd5000_newexperts_20260601/` |
+
+同步时显式排除了 `*.safetensors`、`*.pt`、`*.pth`、`*.bin`、`predictions.jsonl` 和 `raw_holdout_eval_v1_10k.jsonl`。因此本地保留了恢复远端代码与实验流水线所需的脚本、配置、日志、summary JSON 和评估 metrics，但没有复制模型权重、optimizer state 或原始大样本预测文件。
+
+本轮新增报告附件：
+
+| 文件 | 说明 |
+|---|---|
+| `report/opd5000_newexperts_20260601/artifact_manifest.json` | 本地同步范围、远端关键路径、最终模型路径索引 |
+| `report/opd5000_newexperts_20260601/coldstart500_training_curve_summary.json` | coldstart500 的训练曲线摘要 |
+| `report/opd5000_newexperts_20260601/opd5000_training_curve_summary.json` | OPD5000 的训练曲线摘要 |
+| `report/opd5000_newexperts_20260601/opd5000_ckpt_eval_comparison_summary.json` | 1000/2000/3000/4000/5000 的完整 eval summary |
+| `report/opd5000_newexperts_20260601/opd5000_ckpt_eval_by_format_table.md` | 按 box/point/text 子集整理的 checkpoint 表 |
+| `report/opd5000_newexperts_20260601/opd5000_ckpt_eval_by_pool_table.md` | 按 eval pool 整理的 checkpoint 表 |
+| `report/opd5000_newexperts_20260601/remote_model_summaries/` | coldstart500、OPD5000、五个 200k experts 的 `trainer_state.json` / run summary 小文件 |

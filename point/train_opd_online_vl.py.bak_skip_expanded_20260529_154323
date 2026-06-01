@@ -109,7 +109,6 @@ class OPDOnlineDataset(Dataset):
         world_size: int,
         per_device_batch_size: int,
         limit_samples: int | None = None,
-        skip_expanded_samples: int = 0,
         route_policy: str = "target",
         group_by_route: bool = True,
         shuffle_samples: bool = False,
@@ -130,7 +129,6 @@ class OPDOnlineDataset(Dataset):
         self.format_counts: Counter[str] = Counter()
         self.candidate_len_counts: Counter[int] = Counter()
         self.raw_rows_seen = 0
-        self.skipped_expanded_rows = 0
 
         rows: list[dict[str, Any]] = []
         with open(path, "r", encoding="utf-8") as f:
@@ -152,17 +150,6 @@ class OPDOnlineDataset(Dataset):
         elif shuffle_samples:
             rng = random.Random(shuffle_seed)
             rng.shuffle(rows)
-
-        if skip_expanded_samples < 0:
-            raise ValueError(f"skip_expanded_samples must be >= 0, got {skip_expanded_samples}")
-        if skip_expanded_samples:
-            if skip_expanded_samples >= len(rows):
-                raise ValueError(
-                    f"skip_expanded_samples={skip_expanded_samples} leaves no OPD rows "
-                    f"after schedule length {len(rows)}"
-                )
-            rows = rows[skip_expanded_samples:]
-            self.skipped_expanded_rows = int(skip_expanded_samples)
 
         if pad_to_world_batch and rows:
             pad_to = max(world_size * per_device_batch_size, 1)
@@ -262,7 +249,6 @@ class OPDOnlineDataset(Dataset):
             "path": self.path,
             "raw_rows_seen": self.raw_rows_seen,
             "expanded_rows": len(self.rows),
-            "skipped_expanded_rows": self.skipped_expanded_rows,
             "padded_rows": self.padded_rows,
             "route_policy": self.route_policy,
             "group_by_route": self.group_by_route,
@@ -827,7 +813,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--optim", default="adamw_torch")
     parser.add_argument("--max-shard-size", "--max_shard_size", dest="max_shard_size", default="4GB")
     parser.add_argument("--limit-samples", "--limit_samples", dest="limit_samples", type=int, default=None)
-    parser.add_argument("--skip-expanded-samples", "--skip_expanded_samples", dest="skip_expanded_samples", type=int, default=0)
     parser.add_argument("--seed", type=int, default=20260520)
     parser.add_argument("--opd-max-new-tokens", "--opd_max_new_tokens", dest="opd_max_new_tokens", type=int, default=48)
     parser.add_argument("--opd-do-sample", "--opd_do_sample", dest="opd_do_sample", action="store_true")
@@ -885,8 +870,7 @@ def main() -> None:
         args.teacher_deepspeed = args.deepspeed
     log(
         f"[opd-online] route_policy={args.route_policy} group_by_route={args.group_by_route} "
-        f"shuffle_samples={args.shuffle_samples} route_block_shuffle={args.route_block_shuffle} "
-        f"skip_expanded_samples={args.skip_expanded_samples}"
+        f"shuffle_samples={args.shuffle_samples} route_block_shuffle={args.route_block_shuffle}"
     )
     log(f"[opd-online] teacher_load_mode={args.teacher_load_mode} teacher_deepspeed={args.teacher_deepspeed}")
     log(
@@ -907,7 +891,6 @@ def main() -> None:
         world_size=world_size,
         per_device_batch_size=args.per_device_train_batch_size,
         limit_samples=args.limit_samples,
-        skip_expanded_samples=args.skip_expanded_samples,
         route_policy=args.route_policy,
         group_by_route=args.group_by_route,
         shuffle_samples=args.shuffle_samples,
@@ -979,7 +962,6 @@ def main() -> None:
             "teacher_load_mode": args.teacher_load_mode,
             "teacher_deepspeed": args.teacher_deepspeed,
             "dataset_summary": dataset.summary(),
-            "skip_expanded_samples": args.skip_expanded_samples,
             "train_loss": float(result.training_loss),
             "last_route_id": getattr(trainer, "_last_route_id", None),
             "last_response_tokens": getattr(trainer, "_last_response_tokens", None),

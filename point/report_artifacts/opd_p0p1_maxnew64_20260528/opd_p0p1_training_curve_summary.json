@@ -1,0 +1,35 @@
+{
+  "records": 2500,
+  "first100": {
+    "loss": 0.10702600000000001,
+    "opd_loss": 0.09194769058609381,
+    "entropy": 0.3280257016420364,
+    "student_entropy": 0.4520846424251795,
+    "teacher_entropy": 2.5815779042243956,
+    "opd_topk_overlap": 0.6102311909198761,
+    "grad_norm": 8.164953761987181,
+    "opd_loss_tokens": 35.02
+  },
+  "last100": {
+    "loss": 0.029667,
+    "opd_loss": 0.02932617869693786,
+    "entropy": 2.1196821570396422,
+    "student_entropy": 2.156697352528572,
+    "teacher_entropy": 2.1196821570396422,
+    "opd_topk_overlap": 0.8285688608884811,
+    "grad_norm": 1.8415775883105954,
+    "opd_loss_tokens": 33.29
+  },
+  "last": {
+    "step": 2500,
+    "loss": 0.0288,
+    "opd_loss": 0.020671557635068893,
+    "entropy": 0.7299731969833374,
+    "student_entropy": 0.7602532505989075,
+    "teacher_entropy": 0.7299731969833374,
+    "opd_topk_overlap": 0.8065104484558105,
+    "grad_norm": 0.6716484121681308,
+    "opd_loss_tokens": 24.0,
+    "opd_response_tokens": 24.0
+  }
+}

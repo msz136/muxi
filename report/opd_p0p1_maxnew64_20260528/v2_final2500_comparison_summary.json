@@ -1,0 +1,156 @@
+{
+  "run_dir": "/data/msz/point/eval_raw_holdout_v1/opd_p0p1_maxnew64_final2500_20260528_133416",
+  "models": [
+    {
+      "model": "opd_p0p1_maxnew64_final2500",
+      "rows": 10000,
+      "seconds": 1262.923,
+      "samples_per_sec": 7.918139110618779,
+      "format_pass": 1.0,
+      "coord_valid": 0.75,
+      "iou_mean": 0.4723266604044713,
+      "acc_iou_0_3": 0.3705,
+      "acc_iou_0_5": 0.3146,
+      "acc_iou_0_75": 0.2049,
+      "center_dist_mean": 126.2494989147111,
+      "hit_at_50": 0.1,
+      "hit_at_100": 0.1187,
+      "min_point_dist_mean": 56.603313526578425,
+      "mean_pred_to_gold_dist_mean": 78.10391438311927,
+      "text_exact": 0.2186,
+      "text_loose": 0.2186,
+      "bool_acc": 0.0821,
+      "mc_acc": 0.002
+    }
+  ],
+  "by_pool": {
+    "flickr30k_entities": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 900,
+        "format_pass": 1.0,
+        "coord_valid": 1.0,
+        "iou_mean": 0.7027044213948381,
+        "acc_iou_0_3": 0.8588888888888889,
+        "acc_iou_0_5": 0.7733333333333333,
+        "acc_iou_0_75": 0.6,
+        "center_dist_mean": 68.75480748025481
+      }
+    },
+    "grounding_point": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 1400,
+        "format_pass": 1.0,
+        "coord_valid": 1.0,
+        "hit_at_50": 0.7142857142857143,
+        "hit_at_100": 0.8478571428571429,
+        "min_point_dist_mean": 56.603313526578425,
+        "mean_pred_to_gold_dist_mean": 78.10391438311927
+      }
+    },
+    "keepalive_vqa": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 2500,
+        "format_pass": 1.0,
+        "text_exact": 0.8744,
+        "text_loose": 0.8744,
+        "bool_acc": 0.3284,
+        "mc_acc": 0.008
+      }
+    },
+    "refcoco": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 1100,
+        "format_pass": 1.0,
+        "coord_valid": 1.0,
+        "iou_mean": 0.7307986172288261,
+        "acc_iou_0_3": 0.89,
+        "acc_iou_0_5": 0.8309090909090909,
+        "acc_iou_0_75": 0.6663636363636364,
+        "center_dist_mean": 62.25385492601306
+      }
+    },
+    "semantic_nav_box": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 800,
+        "format_pass": 1.0,
+        "coord_valid": 1.0,
+        "iou_mean": 0.28207035948969694,
+        "acc_iou_0_3": 0.385,
+        "acc_iou_0_5": 0.30625,
+        "acc_iou_0_75": 0.07625,
+        "center_dist_mean": 158.53456481152836
+      }
+    },
+    "visual_genome_object": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 1100,
+        "format_pass": 1.0,
+        "coord_valid": 1.0,
+        "iou_mean": 0.3217295577551148,
+        "acc_iou_0_3": 0.4263636363636364,
+        "acc_iou_0_5": 0.3418181818181818,
+        "acc_iou_0_75": 0.19272727272727272,
+        "center_dist_mean": 184.27069357391113
+      }
+    },
+    "visual_genome_region": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 1100,
+        "format_pass": 1.0,
+        "coord_valid": 1.0,
+        "iou_mean": 0.3898252661028337,
+        "acc_iou_0_3": 0.5481818181818182,
+        "acc_iou_0_5": 0.4109090909090909,
+        "acc_iou_0_75": 0.1918181818181818,
+        "center_dist_mean": 135.17062094464555
+      }
+    },
+    "visual_genome_relationship": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 1100,
+        "format_pass": 1.0,
+        "coord_valid": 1.0,
+        "iou_mean": 0.3968305240224556,
+        "acc_iou_0_3": 0.5209090909090909,
+        "acc_iou_0_5": 0.4209090909090909,
+        "acc_iou_0_75": 0.26545454545454544,
+        "center_dist_mean": 146.8638894629606
+      }
+    }
+  },
+  "by_format": {
+    "box": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 6100,
+        "format_pass": 1.0,
+        "coord_valid": 1.0,
+        "iou_mean": 0.4723266604044713,
+        "acc_iou_0_3": 0.6073770491803279,
+        "acc_iou_0_5": 0.5157377049180328,
+        "acc_iou_0_75": 0.3359016393442623,
+        "center_dist_mean": 126.2494989147111
+      }
+    },
+    "point": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 1400,
+        "format_pass": 1.0,
+        "coord_valid": 1.0,
+        "hit_at_50": 0.7142857142857143,
+        "hit_at_100": 0.8478571428571429,
+        "min_point_dist_mean": 56.603313526578425,
+        "mean_pred_to_gold_dist_mean": 78.10391438311927
+      }
+    },
+    "text": {
+      "opd_p0p1_maxnew64_final2500": {
+        "n": 2500,
+        "format_pass": 1.0,
+        "text_exact": 0.8744,
+        "text_loose": 0.8744,
+        "bool_acc": 0.3284,
+        "mc_acc": 0.008
+      }
+    }
+  }
+}

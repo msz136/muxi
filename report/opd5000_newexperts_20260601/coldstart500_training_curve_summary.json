@@ -1,0 +1,269 @@
+{
+  "name": "coldstart500_newexperts",
+  "steps_logged": 500,
+  "final": {
+    "train_runtime": 16509.9024,
+    "train_samples_per_second": 3.876,
+    "train_steps_per_second": 0.03,
+    "train_loss": 0.14593742505833507,
+    "opd_route_id": 4,
+    "opd_response_tokens": 64,
+    "opd_loss": 0.06538179516792297,
+    "entropy": 2.3217599391937256,
+    "opd_entropy": 2.3217599391937256,
+    "student_entropy": 2.3468003273010254,
+    "teacher_entropy": 2.3217599391937256,
+    "opd_loss_tokens": 64,
+    "opd_veto_beta": 0,
+    "opd_topk_overlap": 0.8340820074081421,
+    "opd_top_k": 10,
+    "opd_vocab_size": 151936,
+    "epoch": 0.06
+  },
+  "first100": {
+    "loss": 0.366485,
+    "opd_loss": 0.37357000563293696,
+    "entropy": 0.5488398766890168,
+    "opd_entropy": 0.5488398766890168,
+    "student_entropy": 0.8363337921351195,
+    "teacher_entropy": 1.2927719515562057,
+    "opd_topk_overlap": 0.5606448292732239,
+    "grad_norm": 79.23809218800562,
+    "opd_response_tokens": 35.65,
+    "opd_loss_tokens": 32.69,
+    "opd_veto_beta": 0.5050000000000001
+  },
+  "last100": {
+    "loss": 0.071778,
+    "opd_loss": 0.07122255077585578,
+    "entropy": 1.2372794818878174,
+    "opd_entropy": 1.2372794818878174,
+    "student_entropy": 1.3138512444496155,
+    "teacher_entropy": 1.2372794818878174,
+    "opd_topk_overlap": 0.7850277596712112,
+    "grad_norm": 2.535431341476328,
+    "opd_response_tokens": 39.33,
+    "opd_loss_tokens": 35.42,
+    "opd_veto_beta": 0
+  },
+  "min": {
+    "loss": 0.0291,
+    "opd_loss": 0.019199920818209648,
+    "entropy": 0.05002421885728836,
+    "opd_entropy": 0.05002421885728836,
+    "student_entropy": 0.0685056746006012,
+    "teacher_entropy": 0.06893078982830048,
+    "opd_topk_overlap": 0.21800000965595245,
+    "grad_norm": 0.7812785879312438,
+    "opd_response_tokens": 3,
+    "opd_loss_tokens": 3,
+    "opd_veto_beta": 0
+  },
+  "max": {
+    "loss": 1.9281,
+    "opd_loss": 2.2398762702941895,
+    "entropy": 2.7439258098602295,
+    "opd_entropy": 2.7439258098602295,
+    "student_entropy": 2.902899980545044,
+    "teacher_entropy": 2.7439258098602295,
+    "opd_topk_overlap": 0.8815104365348816,
+    "grad_norm": 890.2546631482095,
+    "opd_response_tokens": 128,
+    "opd_loss_tokens": 64,
+    "opd_veto_beta": 1
+  },
+  "sampled_every_50": [
+    {
+      "step": 1,
+      "loss": 1.9281,
+      "opd_loss": 2.2398762702941895,
+      "entropy": 0.5509698987007141,
+      "opd_entropy": 0.5509698987007141,
+      "student_entropy": 2.145413398742676,
+      "teacher_entropy": 0.8486528992652893,
+      "opd_topk_overlap": 0.549511730670929,
+      "grad_norm": 407.97873550963146,
+      "opd_response_tokens": 128,
+      "opd_loss_tokens": 64,
+      "opd_veto_beta": 1
+    },
+    {
+      "step": 50,
+      "loss": 0.1121,
+      "opd_loss": 0.16896358132362366,
+      "entropy": 0.5430598855018616,
+      "opd_entropy": 0.5430598855018616,
+      "student_entropy": 0.6318036317825317,
+      "teacher_entropy": 0.7256680727005005,
+      "opd_topk_overlap": 0.6827499866485596,
+      "grad_norm": 1.8981491565909026,
+      "opd_response_tokens": 25,
+      "opd_loss_tokens": 25,
+      "opd_veto_beta": 0.51
+    },
+    {
+      "step": 100,
+      "loss": 0.1057,
+      "opd_loss": 0.1242857575416565,
+      "entropy": 0.7400842905044556,
+      "opd_entropy": 0.7400842905044556,
+      "student_entropy": 0.812530517578125,
+      "teacher_entropy": 0.7434570789337158,
+      "opd_topk_overlap": 0.7361979484558105,
+      "grad_norm": 1.8954657108847774,
+      "opd_response_tokens": 24,
+      "opd_loss_tokens": 24,
+      "opd_veto_beta": 0.010000000000000009
+    },
+    {
+      "step": 150,
+      "loss": 0.2075,
+      "opd_loss": 0.203166663646698,
+      "entropy": 0.9810397028923035,
+      "opd_entropy": 0.9810397028923035,
+      "student_entropy": 1.2778303623199463,
+      "teacher_entropy": 0.9810397028923035,
+      "opd_topk_overlap": 0.7923828363418579,
+      "grad_norm": 5.230793551379362,
+      "opd_response_tokens": 88,
+      "opd_loss_tokens": 64,
+      "opd_veto_beta": 0
+    },
+    {
+      "step": 200,
+      "loss": 0.088,
+      "opd_loss": 0.0931086540222168,
+      "entropy": 0.7282083034515381,
+      "opd_entropy": 0.7282083034515381,
+      "student_entropy": 0.8071608543395996,
+      "teacher_entropy": 0.7282083034515381,
+      "opd_topk_overlap": 0.7559895515441895,
+      "grad_norm": 3.3838074843277477,
+      "opd_response_tokens": 24,
+      "opd_loss_tokens": 24,
+      "opd_veto_beta": 0
+    },
+    {
+      "step": 250,
+      "loss": 0.0614,
+      "opd_loss": 0.09185080230236053,
+      "entropy": 2.4151339530944824,
+      "opd_entropy": 2.4151339530944824,
+      "student_entropy": 2.6750683784484863,
+      "teacher_entropy": 2.4151339530944824,
+      "opd_topk_overlap": 0.8263750076293945,
+      "grad_norm": 4.99605175673601,
+      "opd_response_tokens": 50,
+      "opd_loss_tokens": 50,
+      "opd_veto_beta": 0
+    },
+    {
+      "step": 300,
+      "loss": 0.0795,
+      "opd_loss": 0.07987089455127716,
+      "entropy": 0.7767064571380615,
+      "opd_entropy": 0.7767064571380615,
+      "student_entropy": 0.862144410610199,
+      "teacher_entropy": 0.7767064571380615,
+      "opd_topk_overlap": 0.7442499995231628,
+      "grad_norm": 1.0614234605098587,
+      "opd_response_tokens": 25,
+      "opd_loss_tokens": 25,
+      "opd_veto_beta": 0
+    },
+    {
+      "step": 350,
+      "loss": 0.1278,
+      "opd_loss": 0.13184061646461487,
+      "entropy": 0.8473694324493408,
+      "opd_entropy": 0.8473694324493408,
+      "student_entropy": 1.0463542938232422,
+      "teacher_entropy": 0.8473694324493408,
+      "opd_topk_overlap": 0.8005859851837158,
+      "grad_norm": 5.347034308638932,
+      "opd_response_tokens": 128,
+      "opd_loss_tokens": 64,
+      "opd_veto_beta": 0
+    },
+    {
+      "step": 400,
+      "loss": 0.0832,
+      "opd_loss": 0.08588531613349915,
+      "entropy": 0.6145437955856323,
+      "opd_entropy": 0.6145437955856323,
+      "student_entropy": 0.7230619192123413,
+      "teacher_entropy": 0.6145437955856323,
+      "opd_topk_overlap": 0.7425000071525574,
+      "grad_norm": 1.8549912170894984,
+      "opd_response_tokens": 25,
+      "opd_loss_tokens": 25,
+      "opd_veto_beta": 0
+    },
+    {
+      "step": 450,
+      "loss": 0.084,
+      "opd_loss": 0.06972061097621918,
+      "entropy": 0.8011729717254639,
+      "opd_entropy": 0.8011729717254639,
+      "student_entropy": 0.8673373460769653,
+      "teacher_entropy": 0.8011729717254639,
+      "opd_topk_overlap": 0.775390625,
+      "grad_norm": 2.264387431474126,
+      "opd_response_tokens": 32,
+      "opd_loss_tokens": 32,
+      "opd_veto_beta": 0
+    },
+    {
+      "step": 500,
+      "loss": 0.0342,
+      "opd_loss": 0.06538179516792297,
+      "entropy": 2.3217599391937256,
+      "opd_entropy": 2.3217599391937256,
+      "student_entropy": 2.3468003273010254,
+      "teacher_entropy": 2.3217599391937256,
+      "opd_topk_overlap": 0.8340820074081421,
+      "grad_norm": 2.2066117698005066,
+      "opd_response_tokens": 64,
+      "opd_loss_tokens": 64,
+      "opd_veto_beta": 0
+    }
+  ],
+  "peak_memory": [
+    {
+      "gpu": "0",
+      "peak_mib": 50721
+    },
+    {
+      "gpu": "1",
+      "peak_mib": 51357
+    },
+    {
+      "gpu": "2",
+      "peak_mib": 50687
+    },
+    {
+      "gpu": "3",
+      "peak_mib": 50901
+    },
+    {
+      "gpu": "4",
+      "peak_mib": 50743
+    },
+    {
+      "gpu": "5",
+      "peak_mib": 51217
+    },
+    {
+      "gpu": "6",
+      "peak_mib": 50925
+    },
+    {
+      "gpu": "7",
+      "peak_mib": 50743
+    },
+    {
+      "gpu": "all",
+      "peak_mib": 51357
+    }
+  ]
+}

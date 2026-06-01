@@ -1,0 +1,33 @@
+{
+  "generated_at": "2026-06-01T03:39:08.717Z",
+  "remote_root": "/data/msz/point",
+  "local_sync_scope": "code/scripts/configs/logs/eval summaries only; excludes model weights, optimizer .pt, raw holdout jsonl, predictions.jsonl",
+  "synced_remote_paths": {
+    "code": [
+      "/data/msz/point/train_opd_online_vl.py"
+    ],
+    "scripts": [
+      "/data/msz/point/run_seed0_five_experts_300k_mb4_filtered_stdtrainer_maxnorm5_v1.sh",
+      "/data/msz/point/run_seed0_five_experts_continue100k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1.sh",
+      "/data/msz/point/run_opd_offpolicy_coldstart500_p0p1_zero3_mb16_accum1_newexperts.sh",
+      "/data/msz/point/run_opd_p0p1_studentrollout_full5000_skip64000_save1000_zero3_mb16_accum1_from_coldstart500_newexperts.sh",
+      "/data/msz/point/eval_qwen_vl_raw_holdout.py",
+      "/data/msz/point/launch_raw_holdout_eval_8models.sh",
+      "/data/msz/point/launch_opd_ckpt_eval.sh",
+      "/data/msz/point/summarize_raw_holdout_eval.py"
+    ],
+    "eval_dir": "/data/msz/point/eval_raw_holdout_v1/opd5000_newexperts_ckpts_1000_2000_3000_4000_5000_retry_20260601_104908",
+    "report_dir": "C:\\Users\\mousongzhe\\muxi\\report\\opd5000_newexperts_20260601"
+  },
+  "final_paths": {
+    "expert_200k_models": [
+      "/data/msz/models/seed0_general_reasoning_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+      "/data/msz/models/seed0_region_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+      "/data/msz/models/seed0_robopoint_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+      "/data/msz/models/seed0_spatial_rel_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+      "/data/msz/models/seed0_general_obj_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1"
+    ],
+    "coldstart500": "/data/msz/models/opd_offpolicy_coldstart500_newexperts_p0p1_fullvocab_maxnew128_prefix64_veto1to0_zero3_mb16_accum1_20260529_105409",
+    "opd5000": "/data/msz/models/opd_p0p1_studentrollout_full5000_skip64000_save1000_zero3_mb16_accum1_from_coldstart500_newexperts_maxnew64_prefix64_veto1to0s500_maxnorm5_20260529_154544"
+  }
+}

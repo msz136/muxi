@@ -1,0 +1,17 @@
+/opt/conda/lib/python3.12/site-packages/torchvision/datapoints/__init__.py:12: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+/opt/conda/lib/python3.12/site-packages/torchvision/transforms/v2/__init__.py:54: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:00<00:01,  1.85it/s]Loading checkpoint shards:  50%|█████     | 2/4 [00:00<00:00,  2.53it/s]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:01<00:00,  2.90it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:01<00:00,  3.97it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:01<00:00,  3.26it/s]
+The following generation flags are not valid and may be ignored: ['temperature', 'top_p', 'top_k']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+{"stage": "progress", "model": "opd5000_ckpt4000", "processed": 1200, "total": 10000, "samples_per_sec": 5.7996, "time": "2026-06-01 10:54:12"}
+{"stage": "progress", "model": "opd5000_ckpt4000", "processed": 2400, "total": 10000, "samples_per_sec": 5.8058, "time": "2026-06-01 10:57:39"}
+{"stage": "progress", "model": "opd5000_ckpt4000", "processed": 3600, "total": 10000, "samples_per_sec": 5.7751, "time": "2026-06-01 11:01:09"}
+{"stage": "progress", "model": "opd5000_ckpt4000", "processed": 4800, "total": 10000, "samples_per_sec": 5.7622, "time": "2026-06-01 11:04:38"}
+{"stage": "progress", "model": "opd5000_ckpt4000", "processed": 6000, "total": 10000, "samples_per_sec": 5.6819, "time": "2026-06-01 11:08:21"}
+{"stage": "progress", "model": "opd5000_ckpt4000", "processed": 7200, "total": 10000, "samples_per_sec": 5.7015, "time": "2026-06-01 11:11:48"}
+{"stage": "progress", "model": "opd5000_ckpt4000", "processed": 8400, "total": 10000, "samples_per_sec": 5.7107, "time": "2026-06-01 11:15:16"}
+{"stage": "progress", "model": "opd5000_ckpt4000", "processed": 9600, "total": 10000, "samples_per_sec": 5.7444, "time": "2026-06-01 11:18:37"}
+{"stage": "progress", "model": "opd5000_ckpt4000", "processed": 10000, "total": 10000, "samples_per_sec": 5.7288, "time": "2026-06-01 11:19:51"}
+{"stage": "done", "model": "opd5000_ckpt4000", "metrics": "/data/msz/point/eval_raw_holdout_v1/opd5000_newexperts_ckpts_1000_2000_3000_4000_5000_retry_20260601_104908/opd5000_ckpt4000/metrics.json", "seconds": 1745.564, "time": "2026-06-01 11:19:51"}

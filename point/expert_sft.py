@@ -438,6 +438,37 @@ def build_training_args(args: argparse.Namespace) -> TrainingArguments:
 
 def save_final_model(trainer: Trainer, processor: Any, args: argparse.Namespace) -> None:
     trainer.accelerator.wait_for_everyone()
+
+    if getattr(trainer, "is_deepspeed_enabled", False):
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if trainer.is_world_process_zero():
+            log(f"[save] writing DeepSpeed final model to {output_dir}")
+        trainer.save_model(str(output_dir))
+        trainer.accelerator.wait_for_everyone()
+        if trainer.is_world_process_zero():
+            processor.save_pretrained(output_dir)
+            trainer.state.save_to_json(str(output_dir / "trainer_state.json"))
+            with open(output_dir / "run_summary.json", "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "data_path": args.data_path,
+                        "model_name_or_path": args.model_name_or_path,
+                        "num_train_epochs": args.num_train_epochs,
+                        "per_device_train_batch_size": args.per_device_train_batch_size,
+                        "gradient_accumulation_steps": args.gradient_accumulation_steps,
+                        "learning_rate": args.learning_rate,
+                        "save_policy": "final_model_only_no_intermediate_checkpoints",
+                        "sequential_sampling": bool(args.sequential_sampling),
+                        "transformers_version": transformers.__version__,
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+        trainer.accelerator.wait_for_everyone()
+        return
+
     if not trainer.is_world_process_zero():
         trainer.accelerator.wait_for_everyone()
         return
