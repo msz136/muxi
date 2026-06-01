@@ -1,0 +1,2353 @@
+{
+  "model": "general_reasoning_expert_200k",
+  "model_path": "/data/msz/models/seed0_general_reasoning_expert_200k_from100k_mb1_filtered_stdtrainer_maxnorm5_v1",
+  "eval_path": "/data/msz/point/eval_raw_holdout_v1/raw_holdout_eval_v1_10k.jsonl",
+  "rows": 10000,
+  "batch_size": 24,
+  "max_new_tokens": 64,
+  "seconds": 1786.211,
+  "overall": {
+    "n": 10000,
+    "acc_iou_0_3": 0.3535,
+    "acc_iou_0_5": 0.2926,
+    "acc_iou_0_75": 0.1847,
+    "bool_acc": 0.0823,
+    "coord_valid": 0.7499,
+    "format_pass": 0.9999,
+    "hit_at_100": 0.118,
+    "hit_at_50": 0.0985,
+    "mc_acc": 0.002,
+    "text_exact": 0.22,
+    "text_loose": 0.22,
+    "center_dist_mean": 139.1581193080506,
+    "gold_point_count_mean": 8.657857142857143,
+    "iou_mean": 0.44293216422739556,
+    "mean_gold_to_pred_dist_mean": 99.51335658139686,
+    "mean_pred_to_gold_dist_mean": 80.89811272882767,
+    "min_point_dist_mean": 58.140260216966105,
+    "point_count_abs_diff_mean": 4.387142857142857,
+    "pred_point_count_mean": 4.697857142857143
+  },
+  "by_pool": {
+    "flickr30k_entities": {
+      "n": 900,
+      "acc_iou_0_3": 0.7866666666666666,
+      "acc_iou_0_5": 0.6766666666666666,
+      "acc_iou_0_75": 0.49,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 93.40811579537217,
+      "iou_mean": 0.6189346751450843
+    },
+    "grounding_point": {
+      "n": 1400,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.8428571428571429,
+      "hit_at_50": 0.7035714285714286,
+      "gold_point_count_mean": 8.657857142857143,
+      "mean_gold_to_pred_dist_mean": 99.51335658139686,
+      "mean_pred_to_gold_dist_mean": 80.89811272882767,
+      "min_point_dist_mean": 58.140260216966105,
+      "point_count_abs_diff_mean": 4.387142857142857,
+      "pred_point_count_mean": 4.697857142857143
+    },
+    "keepalive_vqa": {
+      "n": 2500,
+      "bool_acc": 0.3292,
+      "format_pass": 1.0,
+      "mc_acc": 0.008,
+      "text_exact": 0.88,
+      "text_loose": 0.88
+    },
+    "refcoco": {
+      "n": 1100,
+      "acc_iou_0_3": 0.8554545454545455,
+      "acc_iou_0_5": 0.8036363636363636,
+      "acc_iou_0_75": 0.6281818181818182,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 74.86666988165545,
+      "iou_mean": 0.7024454998810151
+    },
+    "semantic_nav_box": {
+      "n": 800,
+      "acc_iou_0_3": 0.365,
+      "acc_iou_0_5": 0.27125,
+      "acc_iou_0_75": 0.08625,
+      "coord_valid": 0.99875,
+      "format_pass": 0.99875,
+      "center_dist_mean": 176.67896368168527,
+      "iou_mean": 0.26491765557490726
+    },
+    "visual_genome_object": {
+      "n": 1100,
+      "acc_iou_0_3": 0.41545454545454547,
+      "acc_iou_0_5": 0.32181818181818184,
+      "acc_iou_0_75": 0.1709090909090909,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 193.66238272164506,
+      "iou_mean": 0.304437303573401
+    },
+    "visual_genome_region": {
+      "n": 1100,
+      "acc_iou_0_3": 0.5381818181818182,
+      "acc_iou_0_5": 0.3881818181818182,
+      "acc_iou_0_75": 0.18545454545454546,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 143.06972928097943,
+      "iou_mean": 0.3746879507703578
+    },
+    "visual_genome_relationship": {
+      "n": 1100,
+      "acc_iou_0_3": 0.4954545454545455,
+      "acc_iou_0_5": 0.39545454545454545,
+      "acc_iou_0_75": 0.2309090909090909,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 155.21173944507964,
+      "iou_mean": 0.3754591141279182
+    }
+  },
+  "by_format": {
+    "box": {
+      "n": 6100,
+      "acc_iou_0_3": 0.5795081967213115,
+      "acc_iou_0_5": 0.479672131147541,
+      "acc_iou_0_75": 0.30278688524590164,
+      "coord_valid": 0.9998360655737705,
+      "format_pass": 0.9998360655737705,
+      "center_dist_mean": 139.1581193080506,
+      "iou_mean": 0.44293216422739556
+    },
+    "point": {
+      "n": 1400,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.8428571428571429,
+      "hit_at_50": 0.7035714285714286,
+      "gold_point_count_mean": 8.657857142857143,
+      "mean_gold_to_pred_dist_mean": 99.51335658139686,
+      "mean_pred_to_gold_dist_mean": 80.89811272882767,
+      "min_point_dist_mean": 58.140260216966105,
+      "point_count_abs_diff_mean": 4.387142857142857,
+      "pred_point_count_mean": 4.697857142857143
+    },
+    "text": {
+      "n": 2500,
+      "bool_acc": 0.3292,
+      "format_pass": 1.0,
+      "mc_acc": 0.008,
+      "text_exact": 0.88,
+      "text_loose": 0.88
+    }
+  },
+  "by_group": {
+    "flickr30k_entities/flickr30k_entities": {
+      "n": 900,
+      "acc_iou_0_3": 0.7866666666666666,
+      "acc_iou_0_5": 0.6766666666666666,
+      "acc_iou_0_75": 0.49,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 93.40811579537217,
+      "iou_mean": 0.6189346751450843
+    },
+    "grounding_point/VG_100K": {
+      "n": 32,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.3125,
+      "hit_at_50": 0.15625,
+      "gold_point_count_mean": 2.0,
+      "mean_gold_to_pred_dist_mean": 305.2911502886622,
+      "mean_pred_to_gold_dist_mean": 308.2454421253304,
+      "min_point_dist_mean": 231.15887142384142,
+      "point_count_abs_diff_mean": 0.0,
+      "pred_point_count_mean": 2.0
+    },
+    "grounding_point/coco": {
+      "n": 206,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.8689320388349514,
+      "hit_at_50": 0.7475728155339806,
+      "gold_point_count_mean": 4.5,
+      "mean_gold_to_pred_dist_mean": 125.97807036278014,
+      "mean_pred_to_gold_dist_mean": 93.30691914305518,
+      "min_point_dist_mean": 53.41380725779229,
+      "point_count_abs_diff_mean": 1.6650485436893203,
+      "pred_point_count_mean": 3.320388349514563
+    },
+    "grounding_point/object_ref": {
+      "n": 628,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.8726114649681529,
+      "hit_at_50": 0.7707006369426752,
+      "gold_point_count_mean": 10.992038216560509,
+      "mean_gold_to_pred_dist_mean": 87.8091332822332,
+      "mean_pred_to_gold_dist_mean": 69.19092651147791,
+      "min_point_dist_mean": 46.672361886464984,
+      "point_count_abs_diff_mean": 5.211783439490445,
+      "pred_point_count_mean": 6.025477707006369
+    },
+    "grounding_point/region_ref": {
+      "n": 532,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.8327067669172933,
+      "hit_at_50": 0.6428571428571429,
+      "gold_point_count_mean": 7.94172932330827,
+      "mean_gold_to_pred_dist_mean": 90.29746886302597,
+      "mean_pred_to_gold_dist_mean": 75.71238424513824,
+      "min_point_dist_mean": 62.53812421949494,
+      "point_count_abs_diff_mean": 4.7443609022556394,
+      "pred_point_count_mean": 3.8364661654135337
+    },
+    "grounding_point/text_vqa": {
+      "n": 2,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.0,
+      "hit_at_50": 0.0,
+      "gold_point_count_mean": 1.0,
+      "mean_gold_to_pred_dist_mean": 207.75538680664232,
+      "mean_pred_to_gold_dist_mean": 220.6940306285109,
+      "min_point_dist_mean": 207.75538680664232,
+      "point_count_abs_diff_mean": 1.0,
+      "pred_point_count_mean": 2.0
+    },
+    "keepalive_vqa/keepalive_vqa": {
+      "n": 2500,
+      "bool_acc": 0.3292,
+      "format_pass": 1.0,
+      "mc_acc": 0.008,
+      "text_exact": 0.88,
+      "text_loose": 0.88
+    },
+    "refcoco/refcoco:testA": {
+      "n": 9,
+      "acc_iou_0_3": 0.7777777777777778,
+      "acc_iou_0_5": 0.7777777777777778,
+      "acc_iou_0_75": 0.4444444444444444,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 116.4970713399459,
+      "iou_mean": 0.6336455938804133
+    },
+    "refcoco/refcoco:testB": {
+      "n": 13,
+      "acc_iou_0_3": 0.9230769230769231,
+      "acc_iou_0_5": 0.8461538461538461,
+      "acc_iou_0_75": 0.6923076923076923,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 38.22921349769683,
+      "iou_mean": 0.7694144550688863
+    },
+    "refcoco/refcoco:train": {
+      "n": 238,
+      "acc_iou_0_3": 0.9327731092436975,
+      "acc_iou_0_5": 0.8823529411764706,
+      "acc_iou_0_75": 0.6764705882352942,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 49.21020258498722,
+      "iou_mean": 0.7612807058600944
+    },
+    "refcoco/refcoco:val": {
+      "n": 13,
+      "acc_iou_0_3": 0.8461538461538461,
+      "acc_iou_0_5": 0.7692307692307693,
+      "acc_iou_0_75": 0.6923076923076923,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 58.634269663429635,
+      "iou_mean": 0.6973098304377472
+    },
+    "refcoco/refcocog:test": {
+      "n": 50,
+      "acc_iou_0_3": 0.78,
+      "acc_iou_0_5": 0.72,
+      "acc_iou_0_75": 0.62,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 87.79294958477497,
+      "iou_mean": 0.6724303114719672
+    },
+    "refcoco/refcocog:train": {
+      "n": 446,
+      "acc_iou_0_3": 0.8632286995515696,
+      "acc_iou_0_5": 0.8116591928251121,
+      "acc_iou_0_75": 0.6300448430493274,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 71.7228890334008,
+      "iou_mean": 0.7049956758745609
+    },
+    "refcoco/refcocog:val": {
+      "n": 22,
+      "acc_iou_0_3": 0.7727272727272727,
+      "acc_iou_0_5": 0.7727272727272727,
+      "acc_iou_0_75": 0.5454545454545454,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 113.42210943228125,
+      "iou_mean": 0.6757742919714492
+    },
+    "refcoco/refcocoplus:testA": {
+      "n": 14,
+      "acc_iou_0_3": 0.7142857142857143,
+      "acc_iou_0_5": 0.6428571428571429,
+      "acc_iou_0_75": 0.5,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 95.29669053326755,
+      "iou_mean": 0.5843406088508099
+    },
+    "refcoco/refcocoplus:testB": {
+      "n": 8,
+      "acc_iou_0_3": 0.875,
+      "acc_iou_0_5": 0.875,
+      "acc_iou_0_75": 0.75,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 32.8872562835124,
+      "iou_mean": 0.7852719727481794
+    },
+    "refcoco/refcocoplus:train": {
+      "n": 271,
+      "acc_iou_0_3": 0.8154981549815498,
+      "acc_iou_0_5": 0.7601476014760148,
+      "acc_iou_0_75": 0.6088560885608856,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 95.21239899696609,
+      "iou_mean": 0.6702878670189182
+    },
+    "refcoco/refcocoplus:val": {
+      "n": 16,
+      "acc_iou_0_3": 0.625,
+      "acc_iou_0_5": 0.5625,
+      "acc_iou_0_75": 0.375,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 128.77846811765562,
+      "iou_mean": 0.48171488205351704
+    },
+    "semantic_nav_box/obj_only:behind": {
+      "n": 15,
+      "acc_iou_0_3": 0.3333333333333333,
+      "acc_iou_0_5": 0.26666666666666666,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 0.9333333333333333,
+      "format_pass": 0.9333333333333333,
+      "center_dist_mean": 229.6542371933689,
+      "iou_mean": 0.23653890134485517
+    },
+    "semantic_nav_box/obj_only:beside": {
+      "n": 43,
+      "acc_iou_0_3": 0.4883720930232558,
+      "acc_iou_0_5": 0.4883720930232558,
+      "acc_iou_0_75": 0.13953488372093023,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 133.15387555930693,
+      "iou_mean": 0.36598657743246454
+    },
+    "semantic_nav_box/obj_only:front": {
+      "n": 8,
+      "acc_iou_0_3": 0.75,
+      "acc_iou_0_5": 0.25,
+      "acc_iou_0_75": 0.125,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 96.5106810463302,
+      "iou_mean": 0.3884703407126929
+    },
+    "semantic_nav_box/obj_only:inside": {
+      "n": 31,
+      "acc_iou_0_3": 0.25806451612903225,
+      "acc_iou_0_5": 0.1935483870967742,
+      "acc_iou_0_75": 0.06451612903225806,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 225.41812197924133,
+      "iou_mean": 0.20499604906598473
+    },
+    "semantic_nav_box/obj_only:left": {
+      "n": 22,
+      "acc_iou_0_3": 0.4090909090909091,
+      "acc_iou_0_5": 0.36363636363636365,
+      "acc_iou_0_75": 0.18181818181818182,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 234.25199803442976,
+      "iou_mean": 0.29603009503909433
+    },
+    "semantic_nav_box/obj_only:on": {
+      "n": 122,
+      "acc_iou_0_3": 0.4016393442622951,
+      "acc_iou_0_5": 0.3524590163934426,
+      "acc_iou_0_75": 0.12295081967213115,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 179.8440654690424,
+      "iou_mean": 0.29578647661379587
+    },
+    "semantic_nav_box/obj_only:right": {
+      "n": 22,
+      "acc_iou_0_3": 0.36363636363636365,
+      "acc_iou_0_5": 0.2727272727272727,
+      "acc_iou_0_75": 0.045454545454545456,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 189.1759692373869,
+      "iou_mean": 0.23370946377571594
+    },
+    "semantic_nav_box/obj_relation:behind": {
+      "n": 26,
+      "acc_iou_0_3": 0.3076923076923077,
+      "acc_iou_0_5": 0.07692307692307693,
+      "acc_iou_0_75": 0.07692307692307693,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 163.32562338202357,
+      "iou_mean": 0.19570004779494427
+    },
+    "semantic_nav_box/obj_relation:beside": {
+      "n": 38,
+      "acc_iou_0_3": 0.47368421052631576,
+      "acc_iou_0_5": 0.34210526315789475,
+      "acc_iou_0_75": 0.13157894736842105,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 151.62044984702126,
+      "iou_mean": 0.3390056411939512
+    },
+    "semantic_nav_box/obj_relation:between": {
+      "n": 4,
+      "acc_iou_0_3": 0.25,
+      "acc_iou_0_5": 0.25,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 225.07031879255896,
+      "iou_mean": 0.17579789940192875
+    },
+    "semantic_nav_box/obj_relation:front": {
+      "n": 15,
+      "acc_iou_0_3": 0.6666666666666666,
+      "acc_iou_0_5": 0.26666666666666666,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 101.30625881880603,
+      "iou_mean": 0.3400379269857762
+    },
+    "semantic_nav_box/obj_relation:inside": {
+      "n": 36,
+      "acc_iou_0_3": 0.5555555555555556,
+      "acc_iou_0_5": 0.4166666666666667,
+      "acc_iou_0_75": 0.05555555555555555,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 117.09802940624337,
+      "iou_mean": 0.3704865568114927
+    },
+    "semantic_nav_box/obj_relation:left": {
+      "n": 24,
+      "acc_iou_0_3": 0.5833333333333334,
+      "acc_iou_0_5": 0.4583333333333333,
+      "acc_iou_0_75": 0.125,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 149.30088018724726,
+      "iou_mean": 0.3724420685957566
+    },
+    "semantic_nav_box/obj_relation:on": {
+      "n": 112,
+      "acc_iou_0_3": 0.49107142857142855,
+      "acc_iou_0_5": 0.39285714285714285,
+      "acc_iou_0_75": 0.15178571428571427,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 138.2253094309974,
+      "iou_mean": 0.34673334920978827
+    },
+    "semantic_nav_box/obj_relation:right": {
+      "n": 21,
+      "acc_iou_0_3": 0.47619047619047616,
+      "acc_iou_0_5": 0.42857142857142855,
+      "acc_iou_0_75": 0.14285714285714285,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 177.0874696840321,
+      "iou_mean": 0.32118938859582924
+    },
+    "semantic_nav_box/relation_only:behind": {
+      "n": 20,
+      "acc_iou_0_3": 0.1,
+      "acc_iou_0_5": 0.05,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 233.7717487251657,
+      "iou_mean": 0.11422080078492802
+    },
+    "semantic_nav_box/relation_only:beside": {
+      "n": 29,
+      "acc_iou_0_3": 0.1724137931034483,
+      "acc_iou_0_5": 0.13793103448275862,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 204.66444928991817,
+      "iou_mean": 0.15305059074125282
+    },
+    "semantic_nav_box/relation_only:between": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 77.3692445355388,
+      "iou_mean": 0.24738775704947755
+    },
+    "semantic_nav_box/relation_only:front": {
+      "n": 12,
+      "acc_iou_0_3": 0.25,
+      "acc_iou_0_5": 0.08333333333333333,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 221.21487334595682,
+      "iou_mean": 0.1546354934932215
+    },
+    "semantic_nav_box/relation_only:inside": {
+      "n": 27,
+      "acc_iou_0_3": 0.1111111111111111,
+      "acc_iou_0_5": 0.037037037037037035,
+      "acc_iou_0_75": 0.037037037037037035,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 207.71036376204805,
+      "iou_mean": 0.12416519739247724
+    },
+    "semantic_nav_box/relation_only:left": {
+      "n": 20,
+      "acc_iou_0_3": 0.3,
+      "acc_iou_0_5": 0.2,
+      "acc_iou_0_75": 0.1,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 173.2925114670167,
+      "iou_mean": 0.24270666672306004
+    },
+    "semantic_nav_box/relation_only:on": {
+      "n": 126,
+      "acc_iou_0_3": 0.15873015873015872,
+      "acc_iou_0_5": 0.05555555555555555,
+      "acc_iou_0_75": 0.031746031746031744,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 214.26273317163236,
+      "iou_mean": 0.1557969315227667
+    },
+    "semantic_nav_box/relation_only:right": {
+      "n": 26,
+      "acc_iou_0_3": 0.4230769230769231,
+      "acc_iou_0_5": 0.38461538461538464,
+      "acc_iou_0_75": 0.038461538461538464,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 168.02889205818408,
+      "iou_mean": 0.27404079739721726
+    },
+    "visual_genome_object/visual_genome_object": {
+      "n": 1100,
+      "acc_iou_0_3": 0.41545454545454547,
+      "acc_iou_0_5": 0.32181818181818184,
+      "acc_iou_0_75": 0.1709090909090909,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 193.66238272164506,
+      "iou_mean": 0.304437303573401
+    },
+    "visual_genome_region/visual_genome_region": {
+      "n": 1100,
+      "acc_iou_0_3": 0.5381818181818182,
+      "acc_iou_0_5": 0.3881818181818182,
+      "acc_iou_0_75": 0.18545454545454546,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 143.06972928097943,
+      "iou_mean": 0.3746879507703578
+    },
+    "visual_genome_relationship/above": {
+      "n": 6,
+      "acc_iou_0_3": 0.6666666666666666,
+      "acc_iou_0_5": 0.5,
+      "acc_iou_0_75": 0.3333333333333333,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 53.79300467549913,
+      "iou_mean": 0.5015853304477029
+    },
+    "visual_genome_relationship/above a": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 174.13572292898434,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/adorning": {
+      "n": 2,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 170.33955930518493,
+      "iou_mean": 0.06530816769667613
+    },
+    "visual_genome_relationship/advertising": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 15.652475842498529,
+      "iou_mean": 0.8711179749523419
+    },
+    "visual_genome_relationship/against": {
+      "n": 4,
+      "acc_iou_0_3": 0.75,
+      "acc_iou_0_5": 0.75,
+      "acc_iou_0_75": 0.5,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 214.87959320670126,
+      "iou_mean": 0.5926118189679747
+    },
+    "visual_genome_relationship/along": {
+      "n": 3,
+      "acc_iou_0_3": 0.6666666666666666,
+      "acc_iou_0_5": 0.3333333333333333,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 124.33902260870587,
+      "iou_mean": 0.3552206962876569
+    },
+    "visual_genome_relationship/are below": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 285.46146850319394,
+      "iou_mean": 0.08170507682030728
+    },
+    "visual_genome_relationship/are enjoying": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 705.3497359466437,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/are growing on": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 115.85443452885177,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/are in": {
+      "n": 3,
+      "acc_iou_0_3": 0.3333333333333333,
+      "acc_iou_0_5": 0.3333333333333333,
+      "acc_iou_0_75": 0.3333333333333333,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 184.42587440156876,
+      "iou_mean": 0.3285657967651352
+    },
+    "visual_genome_relationship/are on": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 536.5037278528454,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/around": {
+      "n": 7,
+      "acc_iou_0_3": 0.2857142857142857,
+      "acc_iou_0_5": 0.2857142857142857,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 221.37212358970538,
+      "iou_mean": 0.22936308264550265
+    },
+    "visual_genome_relationship/around h": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 87.36704184073076,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/behind": {
+      "n": 26,
+      "acc_iou_0_3": 0.4230769230769231,
+      "acc_iou_0_5": 0.4230769230769231,
+      "acc_iou_0_75": 0.19230769230769232,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 225.22707403741438,
+      "iou_mean": 0.36423709216512395
+    },
+    "visual_genome_relationship/belonging to": {
+      "n": 3,
+      "acc_iou_0_3": 0.3333333333333333,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 80.57928771049869,
+      "iou_mean": 0.11840796019900497
+    },
+    "visual_genome_relationship/beneath": {
+      "n": 3,
+      "acc_iou_0_3": 0.6666666666666666,
+      "acc_iou_0_5": 0.6666666666666666,
+      "acc_iou_0_75": 0.3333333333333333,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 118.35030012683255,
+      "iou_mean": 0.4530710342786646
+    },
+    "visual_genome_relationship/beside": {
+      "n": 10,
+      "acc_iou_0_3": 0.2,
+      "acc_iou_0_5": 0.2,
+      "acc_iou_0_75": 0.2,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 318.454874871005,
+      "iou_mean": 0.21222560973641919
+    },
+    "visual_genome_relationship/between": {
+      "n": 3,
+      "acc_iou_0_3": 0.6666666666666666,
+      "acc_iou_0_5": 0.6666666666666666,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 149.5314695169284,
+      "iou_mean": 0.47414096524604243
+    },
+    "visual_genome_relationship/beyond": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 186.77526602845464,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/bicycle in front of a": {
+      "n": 2,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 596.4464852874015,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/carrying": {
+      "n": 8,
+      "acc_iou_0_3": 0.625,
+      "acc_iou_0_5": 0.375,
+      "acc_iou_0_75": 0.375,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 110.24264193450948,
+      "iou_mean": 0.4626490893122213
+    },
+    "visual_genome_relationship/catching": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 22.80350850198276,
+      "iou_mean": 0.8169699534490055
+    },
+    "visual_genome_relationship/chipping off": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 180.52492902643667,
+      "iou_mean": 0.15213946117274169
+    },
+    "visual_genome_relationship/coming from": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 300.9867106700892,
+      "iou_mean": 0.14518950437317785
+    },
+    "visual_genome_relationship/coming out of": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 41.97618372363071,
+      "iou_mean": 0.07453416149068323
+    },
+    "visual_genome_relationship/connected to": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 127.35089320456296,
+      "iou_mean": 0.11835140997830802
+    },
+    "visual_genome_relationship/contains": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 778.1614549693398,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/covered": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 47.98176737053357,
+      "iou_mean": 0.8502911966650318
+    },
+    "visual_genome_relationship/covering": {
+      "n": 2,
+      "acc_iou_0_3": 0.5,
+      "acc_iou_0_5": 0.5,
+      "acc_iou_0_75": 0.5,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 123.11851215995038,
+      "iou_mean": 0.517395811768453
+    },
+    "visual_genome_relationship/creating a": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 8.246211251235321,
+      "iou_mean": 0.6286549707602339
+    },
+    "visual_genome_relationship/crossing": {
+      "n": 2,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.5,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 11.1568629974421,
+      "iou_mean": 0.7289622181585094
+    },
+    "visual_genome_relationship/cutting": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 28.72716484444645,
+      "iou_mean": 0.7859339852178304
+    },
+    "visual_genome_relationship/dangling": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 32.64965543462902,
+      "iou_mean": 0.5084745762711864
+    },
+    "visual_genome_relationship/displayed in": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 487.33253533906395,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/driving": {
+      "n": 2,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 523.1277109454267,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/eating": {
+      "n": 7,
+      "acc_iou_0_3": 0.7142857142857143,
+      "acc_iou_0_5": 0.5714285714285714,
+      "acc_iou_0_75": 0.5714285714285714,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 111.01599493837055,
+      "iou_mean": 0.5766220991490576
+    },
+    "visual_genome_relationship/etched on": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 329.9276435826498,
+      "iou_mean": 0.035373187124159884
+    },
+    "visual_genome_relationship/fixing": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 3.1622776601683795,
+      "iou_mean": 0.7295504789977892
+    },
+    "visual_genome_relationship/flying": {
+      "n": 3,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.3333333333333333,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 53.97992254983577,
+      "iou_mean": 0.6370666804139916
+    },
+    "visual_genome_relationship/flying in": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 401.1611272294463,
+      "iou_mean": 0.008148332917602061
+    },
+    "visual_genome_relationship/flying over": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 7.433034373659253,
+      "iou_mean": 0.7875874125874126
+    },
+    "visual_genome_relationship/formed in": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 436.3556462336657,
+      "iou_mean": 0.007206193208334477
+    },
+    "visual_genome_relationship/forming": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 17.46424919657298,
+      "iou_mean": 0.42857142857142855
+    },
+    "visual_genome_relationship/front": {
+      "n": 2,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 99.23406215690605,
+      "iou_mean": 0.017549167927382755
+    },
+    "visual_genome_relationship/grazing": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 171.0263137648707,
+      "iou_mean": 0.4005327413984462
+    },
+    "visual_genome_relationship/growing": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 145.49914089093448,
+      "iou_mean": 0.04481230349634456
+    },
+    "visual_genome_relationship/growing in front of": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 79.41190087134295,
+      "iou_mean": 0.1674931129476584
+    },
+    "visual_genome_relationship/growing on corner of": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 74.60060321471938,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/hanging from": {
+      "n": 3,
+      "acc_iou_0_3": 0.3333333333333333,
+      "acc_iou_0_5": 0.3333333333333333,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 245.94865897373668,
+      "iou_mean": 0.23715157221215144
+    },
+    "visual_genome_relationship/hanging off": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 298.7829479739431,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/hanging on": {
+      "n": 2,
+      "acc_iou_0_3": 0.5,
+      "acc_iou_0_5": 0.5,
+      "acc_iou_0_75": 0.5,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 86.04408130381522,
+      "iou_mean": 0.4693725099601594
+    },
+    "visual_genome_relationship/hanging over": {
+      "n": 2,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 366.84124576054455,
+      "iou_mean": 0.09864223982281711
+    },
+    "visual_genome_relationship/has a long": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 21.219095173922945,
+      "iou_mean": 0.9041988122812211
+    },
+    "visual_genome_relationship/has his foot on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 10.5,
+      "iou_mean": 0.9525738349477272
+    },
+    "visual_genome_relationship/has on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 26.248809496813376,
+      "iou_mean": 0.7376942098632949
+    },
+    "visual_genome_relationship/has ponytail in": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 7.826237921249264,
+      "iou_mean": 0.8139300450112528
+    },
+    "visual_genome_relationship/hitting": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 11.884864324004713,
+      "iou_mean": 0.6935857416171584
+    },
+    "visual_genome_relationship/hitting a": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 480.0666620376799,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/holding": {
+      "n": 27,
+      "acc_iou_0_3": 0.5555555555555556,
+      "acc_iou_0_5": 0.4444444444444444,
+      "acc_iou_0_75": 0.3333333333333333,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 156.67347957123133,
+      "iou_mean": 0.436333843283509
+    },
+    "visual_genome_relationship/holding an": {
+      "n": 2,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.5,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 13.823236053431717,
+      "iou_mean": 0.7827457167488846
+    },
+    "visual_genome_relationship/holding to": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 545.0662803733138,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/i standing in": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 515.3067047885172,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/in": {
+      "n": 156,
+      "acc_iou_0_3": 0.4807692307692308,
+      "acc_iou_0_5": 0.358974358974359,
+      "acc_iou_0_75": 0.23717948717948717,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 167.6174921157185,
+      "iou_mean": 0.36731753514916793
+    },
+    "visual_genome_relationship/in a": {
+      "n": 7,
+      "acc_iou_0_3": 0.5714285714285714,
+      "acc_iou_0_5": 0.5714285714285714,
+      "acc_iou_0_75": 0.2857142857142857,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 210.39427142371665,
+      "iou_mean": 0.4279099783271129
+    },
+    "visual_genome_relationship/in a big": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 8.94427190999916,
+      "iou_mean": 0.7214319029850746
+    },
+    "visual_genome_relationship/in base of": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 304.394891547148,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/in between": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 4.031128874149275,
+      "iou_mean": 0.8458646616541353
+    },
+    "visual_genome_relationship/in front of": {
+      "n": 7,
+      "acc_iou_0_3": 0.5714285714285714,
+      "acc_iou_0_5": 0.5714285714285714,
+      "acc_iou_0_75": 0.5714285714285714,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 125.1217777294942,
+      "iou_mean": 0.5466856274623996
+    },
+    "visual_genome_relationship/in middle of": {
+      "n": 2,
+      "acc_iou_0_3": 0.5,
+      "acc_iou_0_5": 0.5,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 214.48646734986607,
+      "iou_mean": 0.3641047926496151
+    },
+    "visual_genome_relationship/inside": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 9.5524865872714,
+      "iou_mean": 0.9613936807734418
+    },
+    "visual_genome_relationship/inside of": {
+      "n": 4,
+      "acc_iou_0_3": 0.25,
+      "acc_iou_0_5": 0.25,
+      "acc_iou_0_75": 0.25,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 164.05298628409153,
+      "iou_mean": 0.23845663694924554
+    },
+    "visual_genome_relationship/is on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 62.69968101992226,
+      "iou_mean": 0.36131041770955
+    },
+    "visual_genome_relationship/jumping": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 22.561028345356956,
+      "iou_mean": 0.7692575897193236
+    },
+    "visual_genome_relationship/kicking up": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 45.27692569068709,
+      "iou_mean": 0.7499412639987469
+    },
+    "visual_genome_relationship/laying on a": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 71.7007670809734,
+      "iou_mean": 0.43657142857142855
+    },
+    "visual_genome_relationship/leading to": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 62.69968101992226,
+      "iou_mean": 0.09670718834065448
+    },
+    "visual_genome_relationship/leaning": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 140.4314779527724,
+      "iou_mean": 0.4264808362369338
+    },
+    "visual_genome_relationship/licking": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 395.8092975158618,
+      "iou_mean": 0.062244251051812576
+    },
+    "visual_genome_relationship/loading on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 69.14658342969665,
+      "iou_mean": 0.647092129741972
+    },
+    "visual_genome_relationship/looking at": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 188.66703474640184,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/lying on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 51.92301994298868,
+      "iou_mean": 0.4001564027370479
+    },
+    "visual_genome_relationship/lying on a": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 44.52246623896749,
+      "iou_mean": 0.6334501995118739
+    },
+    "visual_genome_relationship/mounted on": {
+      "n": 2,
+      "acc_iou_0_3": 0.5,
+      "acc_iou_0_5": 0.5,
+      "acc_iou_0_75": 0.5,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 75.96067299510989,
+      "iou_mean": 0.4065040650406504
+    },
+    "visual_genome_relationship/near": {
+      "n": 14,
+      "acc_iou_0_3": 0.42857142857142855,
+      "acc_iou_0_5": 0.2857142857142857,
+      "acc_iou_0_75": 0.14285714285714285,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 216.02571770832023,
+      "iou_mean": 0.2963488464115988
+    },
+    "visual_genome_relationship/near a": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 123.32072007574396,
+      "iou_mean": 0.5065376569037657
+    },
+    "visual_genome_relationship/next to": {
+      "n": 9,
+      "acc_iou_0_3": 0.4444444444444444,
+      "acc_iou_0_5": 0.3333333333333333,
+      "acc_iou_0_75": 0.1111111111111111,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 208.33746046692872,
+      "iou_mean": 0.3496236151504558
+    },
+    "visual_genome_relationship/not looking at": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 5.0,
+      "iou_mean": 0.9834710743801653
+    },
+    "visual_genome_relationship/of people watching": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 114.5043667289593,
+      "iou_mean": 0.6706097821481225
+    },
+    "visual_genome_relationship/of wall art behind": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 183.4972751841291,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/on": {
+      "n": 444,
+      "acc_iou_0_3": 0.4527027027027027,
+      "acc_iou_0_5": 0.31981981981981983,
+      "acc_iou_0_75": 0.14189189189189189,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 152.41579891871177,
+      "iou_mean": 0.32055721381967506
+    },
+    "visual_genome_relationship/on a": {
+      "n": 14,
+      "acc_iou_0_3": 0.21428571428571427,
+      "acc_iou_0_5": 0.14285714285714285,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 220.39239677665418,
+      "iou_mean": 0.18600486765173546
+    },
+    "visual_genome_relationship/on a white road": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 259.46483384073457,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/on an": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 6.324555320336759,
+      "iou_mean": 0.8618618618618619
+    },
+    "visual_genome_relationship/on back of": {
+      "n": 2,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 12.955975586176539,
+      "iou_mean": 0.8647276264770672
+    },
+    "visual_genome_relationship/on bed of a": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 58.69412236331676,
+      "iou_mean": 0.5251404964829357
+    },
+    "visual_genome_relationship/on black": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 114.5523897611918,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/on bottom of": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 350.3855019831728,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/on its": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 21.633307652783937,
+      "iou_mean": 0.7778884462151394
+    },
+    "visual_genome_relationship/on side": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 8.06225774829855,
+      "iou_mean": 0.7604852429913456
+    },
+    "visual_genome_relationship/on side of": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 292.27726562290127,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/on top": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 174.45701476294957,
+      "iou_mean": 0.01987994074998051
+    },
+    "visual_genome_relationship/on top of": {
+      "n": 21,
+      "acc_iou_0_3": 0.47619047619047616,
+      "acc_iou_0_5": 0.42857142857142855,
+      "acc_iou_0_75": 0.09523809523809523,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 85.44538968311257,
+      "iou_mean": 0.3454532342997466
+    },
+    "visual_genome_relationship/over": {
+      "n": 4,
+      "acc_iou_0_3": 0.75,
+      "acc_iou_0_5": 0.75,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 103.4801281144552,
+      "iou_mean": 0.486303996824586
+    },
+    "visual_genome_relationship/overflowing with": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 110.87943903176999,
+      "iou_mean": 0.0023458445040214475
+    },
+    "visual_genome_relationship/paddling toward": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 3.3541019662496847,
+      "iou_mean": 0.5226623111474071
+    },
+    "visual_genome_relationship/parked on": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 75.29276193632427,
+      "iou_mean": 0.2571780147662018
+    },
+    "visual_genome_relationship/photographing": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 9.899494936611665,
+      "iou_mean": 0.9261188309518662
+    },
+    "visual_genome_relationship/piled on": {
+      "n": 2,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 156.99881258190422,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/playing": {
+      "n": 8,
+      "acc_iou_0_3": 0.5,
+      "acc_iou_0_5": 0.5,
+      "acc_iou_0_75": 0.375,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 239.47960404496305,
+      "iou_mean": 0.43779446331784205
+    },
+    "visual_genome_relationship/plugged into": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 44.02556075736003,
+      "iou_mean": 0.17192112409965757
+    },
+    "visual_genome_relationship/point": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 1.8027756377319946,
+      "iou_mean": 0.9628205128205128
+    },
+    "visual_genome_relationship/posted on": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 327.3606573795941,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/printed": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 304.24866474645376,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/printed on": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 28.324018076537094,
+      "iou_mean": 0.13967766692248657
+    },
+    "visual_genome_relationship/pulling": {
+      "n": 3,
+      "acc_iou_0_3": 0.6666666666666666,
+      "acc_iou_0_5": 0.6666666666666666,
+      "acc_iou_0_75": 0.3333333333333333,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 96.61747864025646,
+      "iou_mean": 0.48619988242065765
+    },
+    "visual_genome_relationship/pulling on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 63.50590523722971,
+      "iou_mean": 0.4560892155620327
+    },
+    "visual_genome_relationship/pushing up": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 8.139410298049853,
+      "iou_mean": 0.9460400947293055
+    },
+    "visual_genome_relationship/reaching for": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 57.638962516686576,
+      "iou_mean": 0.5801754832146491
+    },
+    "visual_genome_relationship/reading": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 5.830951894845301,
+      "iou_mean": 0.9530273377873327
+    },
+    "visual_genome_relationship/reflecting on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 3.1622776601683795,
+      "iou_mean": 0.9559402442717271
+    },
+    "visual_genome_relationship/riding": {
+      "n": 6,
+      "acc_iou_0_3": 0.6666666666666666,
+      "acc_iou_0_5": 0.5,
+      "acc_iou_0_75": 0.3333333333333333,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 111.33386361789927,
+      "iou_mean": 0.4567005610994804
+    },
+    "visual_genome_relationship/riding a": {
+      "n": 2,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.5,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 42.58549548607898,
+      "iou_mean": 0.7063863206661729
+    },
+    "visual_genome_relationship/riding on": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 152.09947402933383,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/rolling around in": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 543.6278598453174,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/run along": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 60.400745028517655,
+      "iou_mean": 0.2457640664961637
+    },
+    "visual_genome_relationship/shaves in": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 25.268557536986556,
+      "iou_mean": 0.5511393746687865
+    },
+    "visual_genome_relationship/shining through": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 368.70482774165026,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/showing": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 7.0710678118654755,
+      "iou_mean": 0.7038748666903661
+    },
+    "visual_genome_relationship/sitting at": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 316.3324991207827,
+      "iou_mean": 0.0028556130644297696
+    },
+    "visual_genome_relationship/sitting in a": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 129.30293886837995,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/sitting next to": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 6.800735254367722,
+      "iou_mean": 0.9646031854847924
+    },
+    "visual_genome_relationship/sitting on": {
+      "n": 11,
+      "acc_iou_0_3": 0.8181818181818182,
+      "acc_iou_0_5": 0.7272727272727273,
+      "acc_iou_0_75": 0.5454545454545454,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 114.0617132296742,
+      "iou_mean": 0.6446388404930804
+    },
+    "visual_genome_relationship/sitting on a": {
+      "n": 3,
+      "acc_iou_0_3": 0.6666666666666666,
+      "acc_iou_0_5": 0.6666666666666666,
+      "acc_iou_0_75": 0.3333333333333333,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 130.8997421189787,
+      "iou_mean": 0.44395064695214886
+    },
+    "visual_genome_relationship/sitting on top of": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 10.259142264341596,
+      "iou_mean": 0.5525407005426739
+    },
+    "visual_genome_relationship/slice on": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 173.09607159031657,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/snowboarding on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 8.73212459828649,
+      "iou_mean": 0.859729738929167
+    },
+    "visual_genome_relationship/spilling out": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 28.00446392988089,
+      "iou_mean": 0.7713395248965467
+    },
+    "visual_genome_relationship/spread on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 24.041630560342615,
+      "iou_mean": 0.7334369843888818
+    },
+    "visual_genome_relationship/standing": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 28.460498941515414,
+      "iou_mean": 0.7481229889166965
+    },
+    "visual_genome_relationship/standing behind": {
+      "n": 2,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 0.5,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 35.30358498968664,
+      "iou_mean": 0.5450439814212297
+    },
+    "visual_genome_relationship/standing beside": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 47.447339229929426,
+      "iou_mean": 0.07240989170842088
+    },
+    "visual_genome_relationship/standing in": {
+      "n": 7,
+      "acc_iou_0_3": 0.14285714285714285,
+      "acc_iou_0_5": 0.14285714285714285,
+      "acc_iou_0_75": 0.14285714285714285,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 344.85928580594316,
+      "iou_mean": 0.12605275703162244
+    },
+    "visual_genome_relationship/standing in front": {
+      "n": 2,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 232.54591746630945,
+      "iou_mean": 0.024733768464445208
+    },
+    "visual_genome_relationship/standing next to": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 228.16496225319085,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/standing on": {
+      "n": 6,
+      "acc_iou_0_3": 0.3333333333333333,
+      "acc_iou_0_5": 0.3333333333333333,
+      "acc_iou_0_75": 0.3333333333333333,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 236.6407001810247,
+      "iou_mean": 0.31504647311159606
+    },
+    "visual_genome_relationship/staring at": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 1.5,
+      "iou_mean": 0.9384723534699334
+    },
+    "visual_genome_relationship/sticking": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 75.8501812786232,
+      "iou_mean": 0.11048988285410011
+    },
+    "visual_genome_relationship/stuck in": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 190.8821626030049,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/surfing": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 27.730849247724095,
+      "iou_mean": 0.5218351962568235
+    },
+    "visual_genome_relationship/surfing in": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 178.63090438107287,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/surrounding": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 472.27957821612404,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/swings": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 42.5,
+      "iou_mean": 0.6689422619417034
+    },
+    "visual_genome_relationship/talking on": {
+      "n": 2,
+      "acc_iou_0_3": 0.5,
+      "acc_iou_0_5": 0.5,
+      "acc_iou_0_75": 0.5,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 93.84405782268618,
+      "iou_mean": 0.37944193281804484
+    },
+    "visual_genome_relationship/that on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 30.20347662107791,
+      "iou_mean": 0.5355059344196339
+    },
+    "visual_genome_relationship/to left of": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 39.42714800743264,
+      "iou_mean": 0.8120286809247126
+    },
+    "visual_genome_relationship/touching": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 2.23606797749979,
+      "iou_mean": 0.9418154945190295
+    },
+    "visual_genome_relationship/towed on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 22.276669409945463,
+      "iou_mean": 0.44020897832817335
+    },
+    "visual_genome_relationship/train": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 239.07530194480566,
+      "iou_mean": 0.004990083807817798
+    },
+    "visual_genome_relationship/under": {
+      "n": 10,
+      "acc_iou_0_3": 0.4,
+      "acc_iou_0_5": 0.4,
+      "acc_iou_0_75": 0.4,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 177.77128238793637,
+      "iou_mean": 0.38905286460251187
+    },
+    "visual_genome_relationship/underneath": {
+      "n": 2,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 21.45479641222791,
+      "iou_mean": 0.8270784192731526
+    },
+    "visual_genome_relationship/unders": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 81.27115109311545,
+      "iou_mean": 0.19476158495634655
+    },
+    "visual_genome_relationship/using": {
+      "n": 2,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 21.298091496925082,
+      "iou_mean": 0.9219530672668567
+    },
+    "visual_genome_relationship/using two": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 4.924428900898052,
+      "iou_mean": 0.9784513867409012
+    },
+    "visual_genome_relationship/walking down": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 60.40695324215582,
+      "iou_mean": 0.8302603059699922
+    },
+    "visual_genome_relationship/walking on": {
+      "n": 5,
+      "acc_iou_0_3": 0.6,
+      "acc_iou_0_5": 0.6,
+      "acc_iou_0_75": 0.6,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 95.31476442412078,
+      "iou_mean": 0.5517436906666062
+    },
+    "visual_genome_relationship/walking to": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 160.3262299188751,
+      "iou_mean": 0.0
+    },
+    "visual_genome_relationship/walking with": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 78.91767862779544,
+      "iou_mean": 0.17474302496328928
+    },
+    "visual_genome_relationship/watching": {
+      "n": 2,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 348.0157581513529,
+      "iou_mean": 0.004485436893203884
+    },
+    "visual_genome_relationship/wearing": {
+      "n": 77,
+      "acc_iou_0_3": 0.7532467532467533,
+      "acc_iou_0_5": 0.6883116883116883,
+      "acc_iou_0_75": 0.5714285714285714,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 109.21235328111884,
+      "iou_mean": 0.62773267292114
+    },
+    "visual_genome_relationship/wearing a": {
+      "n": 8,
+      "acc_iou_0_3": 0.625,
+      "acc_iou_0_5": 0.375,
+      "acc_iou_0_75": 0.25,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 195.98399906054465,
+      "iou_mean": 0.4249701795982952
+    },
+    "visual_genome_relationship/wiping off": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 21.587033144922902,
+      "iou_mean": 0.9320595445578688
+    },
+    "visual_genome_relationship/within": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 66.59016443890194,
+      "iou_mean": 0.22976669348350764
+    },
+    "visual_genome_relationship/working at": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 41.027429848821875,
+      "iou_mean": 0.7428943937418514
+    },
+    "visual_genome_relationship/working with": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 1.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 56.02008568361887,
+      "iou_mean": 0.8282199820584166
+    },
+    "visual_genome_relationship/works on": {
+      "n": 1,
+      "acc_iou_0_3": 1.0,
+      "acc_iou_0_5": 1.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 2.23606797749979,
+      "iou_mean": 0.7430606730533038
+    },
+    "visual_genome_relationship/written on": {
+      "n": 1,
+      "acc_iou_0_3": 0.0,
+      "acc_iou_0_5": 0.0,
+      "acc_iou_0_75": 0.0,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "center_dist_mean": 64.8459713474939,
+      "iou_mean": 0.19273875295974743
+    }
+  },
+  "prediction_file": "/data/msz/point/eval_raw_holdout_v1/experts200k_5models_20260601_141834/general_reasoning_expert_200k/predictions.jsonl"
+}

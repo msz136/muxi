@@ -1,0 +1,17 @@
+/opt/conda/lib/python3.12/site-packages/torchvision/datapoints/__init__.py:12: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+/opt/conda/lib/python3.12/site-packages/torchvision/transforms/v2/__init__.py:54: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:00<00:02,  1.02it/s]Loading checkpoint shards:  50%|█████     | 2/4 [00:01<00:01,  1.13it/s]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:02<00:00,  1.18it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.48it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.33it/s]
+The following generation flags are not valid and may be ignored: ['temperature', 'top_p', 'top_k']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+{"stage": "progress", "model": "region_expert_200k", "processed": 1200, "total": 10000, "samples_per_sec": 5.4704, "time": "2026-06-01 14:23:53"}
+{"stage": "progress", "model": "region_expert_200k", "processed": 2400, "total": 10000, "samples_per_sec": 5.4437, "time": "2026-06-01 14:27:34"}
+{"stage": "progress", "model": "region_expert_200k", "processed": 3600, "total": 10000, "samples_per_sec": 5.3734, "time": "2026-06-01 14:31:23"}
+{"stage": "progress", "model": "region_expert_200k", "processed": 4800, "total": 10000, "samples_per_sec": 5.3968, "time": "2026-06-01 14:35:03"}
+{"stage": "progress", "model": "region_expert_200k", "processed": 6000, "total": 10000, "samples_per_sec": 5.3862, "time": "2026-06-01 14:38:47"}
+{"stage": "progress", "model": "region_expert_200k", "processed": 7200, "total": 10000, "samples_per_sec": 5.3812, "time": "2026-06-01 14:42:31"}
+{"stage": "progress", "model": "region_expert_200k", "processed": 8400, "total": 10000, "samples_per_sec": 5.362, "time": "2026-06-01 14:46:20"}
+{"stage": "progress", "model": "region_expert_200k", "processed": 9600, "total": 10000, "samples_per_sec": 5.3909, "time": "2026-06-01 14:49:54"}
+{"stage": "progress", "model": "region_expert_200k", "processed": 10000, "total": 10000, "samples_per_sec": 5.3865, "time": "2026-06-01 14:51:10"}
+{"stage": "done", "model": "region_expert_200k", "metrics": "/data/msz/point/eval_raw_holdout_v1/experts200k_5models_20260601_141834/region_expert_200k/metrics.json", "seconds": 1856.493, "time": "2026-06-01 14:51:10"}
