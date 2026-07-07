@@ -3951,3 +3951,122 @@ coldstart500 的目的不是产出最终模型，而是把 `8b_base` 先拉近�
 | `report/opd5000_newexperts_20260601/opd5000_ckpt_eval_by_format_table.md` | 按 box/point/text 子集整理的 checkpoint 表 |
 | `report/opd5000_newexperts_20260601/opd5000_ckpt_eval_by_pool_table.md` | 按 eval pool 整理的 checkpoint 表 |
 | `report/opd5000_newexperts_20260601/remote_model_summaries/` | coldstart500、OPD5000、五个 200k experts 的 `trainer_state.json` / run summary 小文件 |
+
+## 2026-06-03：Qwen-122B / Qwen3-35B-VL base64 API raw-holdout 评估
+
+本轮在沐曦服务器 `/data/msz/point` 上复用 raw-holdout 10k eval 口径，对另一台服务器的两个 OpenAI-compatible VLM 服务做评估：
+
+| 项目 | 值 |
+|---|---|
+| API 服务器 | `root@10.12.82.43` |
+| 模型服务 | `qwen-122b` at port `30001`；`qwen-35b` at port `30002` |
+| 访问方式 | 本地 SSH key 建反向隧道，沐曦机访问 `127.0.0.1:13001/13002` |
+| 输入图片 | eval 脚本读取沐曦本地图片后转为 `data:image/...;base64,...` |
+| eval set | `/data/msz/point/eval_raw_holdout_v1/raw_holdout_eval_v1_10k.jsonl` |
+| max tokens | 64 |
+| 最终有效 run | `/data/msz/point/eval_raw_holdout_v1/openai_base64_qwen122_qwen35_nothink_20260603_201411` |
+| 本地结果 | `report/openai_base64_qwen122_qwen35_20260603_nothink/` |
+
+注意：第一版请求没有关闭 Qwen3 thinking，vLLM 返回 `message.reasoning` 且 `message.content=null`，导致 prediction 全为空；该 run 仅保留为调试记录，不作为结果。最终脚本默认加入 `chat_template_kwargs={"enable_thinking": false}`，两模型均 10k 完成且 `api_errors=0`。
+
+### 与 OPD 后 8B 模型对比
+
+这里把 8B base、8B instruct、两个 8B OPD checkpoint 与两个大模型放在同一张表中。`opd5000_ckpt5000` 是最终 checkpoint；`opd5000_ckpt3000` 是同一轮里 box IoU 最高的中间 checkpoint，用作参考。box 指标在 6100 条 box 样本上统计，point 指标在 1400 条 point 样本上统计，text 指标在 2500 条 text 样本上统计。
+
+| 模型 | rows | Overall format | Box format | Box IoU | Box Acc@0.3 | Box Acc@0.5 | Box Acc@0.75 | CenterDist | Point format | Point Hit@50 | Point Hit@100 | Text exact | Text loose |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 8B base | 10000 | 0.8532 | 0.9889 | 0.3854 | 0.5234 | 0.4087 | 0.2098 | 153.5 | 0.0000 | 0.0000 | 0.0000 | 0.0080 | 0.0080 |
+| 8B instruct | 10000 | 0.8578 | 0.9964 | 0.4134 | 0.5577 | 0.4331 | 0.2472 | 140.1 | 0.0000 | 0.0000 | 0.0000 | 0.0076 | 0.5200 |
+| OPD5000 ckpt3000, 8B | 10000 | **1.0000** | **1.0000** | 0.4761 | 0.6156 | 0.5233 | 0.3380 | 126.1 | **1.0000** | 0.7414 | 0.8629 | 0.8716 | 0.8716 |
+| OPD5000 ckpt5000, 8B | 10000 | **1.0000** | **1.0000** | 0.4759 | 0.6123 | 0.5238 | 0.3370 | 125.7 | **1.0000** | **0.7493** | **0.8729** | **0.8724** | **0.8724** |
+| Qwen-122B API, base64 | 10000 | 0.8561 | 0.9936 | **0.5466** | **0.6759** | **0.5841** | **0.4110** | **98.0** | 0.0000 | 0.0000 | 0.0000 | 0.0024 | 0.6000 |
+| Qwen3-35B-VL API, base64 | 10000 | 0.8517 | 0.9864 | 0.5384 | 0.6626 | 0.5782 | 0.4005 | 100.9 | 0.0000 | 0.0057 | 0.0093 | 0.0000 | 0.4476 |
+
+结论：
+
+1. **OPD 对 8B 的增益很大。** 相比 8B base，OPD5000 ckpt5000 的 `Box IoU +0.0905`、`Box Acc@0.5 +0.1151`、`CenterDist -27.9`，并把 point 从几乎不可用提升到 `Hit@50=0.7493` / `Hit@100=0.8729`。
+2. **8B instruct 比 8B base 略好，但远不如 OPD。** instruct 的 box IoU 从 base 的 `0.3854` 到 `0.4134`，text loose 从 `0.0080` 到 `0.5200`，但 point 仍为 0，协议稳定性没有解决。
+3. **box grounding：大模型仍最强。** 相比 OPD5000 ckpt5000，Qwen-122B 的 `Box IoU +0.0707`，`Box Acc@0.5 +0.0603`，`CenterDist -27.7`；Qwen3-35B-VL 也有 `Box IoU +0.0625`、`Box Acc@0.5 +0.0544`。
+4. **point grounding 和统一协议：OPD 8B 明显最强。** base、instruct、122B、35B 在 point 子集都几乎不输出符合 `<point>` 口径的答案；OPD5000 ckpt5000 是唯一在 `<box>/<point>/text` 三类格式上同时稳定的模型。
+5. **实际取舍：** 如果目标只看 `<box>` 区域框选，122B/35B API 是更强 teacher/labeler；如果目标是部署统一遵循 `<box>/<point>/text` 输出协议的 8B 模型，当前 OPD5000 8B 仍然更适合直接作为 student/production 候选。
+
+### Point 协议修正后的重新评估
+
+上表中的大模型 point 结果并不能直接代表真实 point 定位能力，因为 raw-holdout 的 point prompt 本身存在协议不一致：user prompt 里给出的格式示例是 `[(x1, y1), (x2, y2), ...]`，但 gold 与 strict parser 要求的是 `<point>[[x1,y1],[x2,y2],...]</point>`。122B/35B 原始输出经常是 `[(597, 362)]`，坐标可能接近目标，但没有 `<point>` 标签，因此 strict scoring 直接记为格式失败。
+
+为正确评估大模型 point 能力，本轮对 API eval 脚本做了最小修复：
+
+| 项目 | 值 |
+|---|---|
+| 脚本 | `/data/msz/point/eval_openai_vl_raw_holdout_base64.py` |
+| 新参数 | `--expected-format-filter point`，`--enforce-point-protocol` |
+| 协议提示 | 要求只输出 `<point>[[x1,y1],[x2,y2],...]</point>`，禁止 `[(x,y)]`、禁止 XML attributes，opening tag 必须正好是 `<point>` |
+| eval 子集 | raw-holdout 的 1400 条 `expected_format=point` 样本 |
+| scoring | 仍使用原 strict parser，不做 lenient 放宽 |
+| 远端 run | `/data/msz/point/eval_raw_holdout_v1/openai_base64_point_protocol_qwen122_qwen35_20260603_221231` |
+| 本地结果 | `report/openai_base64_point_protocol_qwen122_qwen35_20260603/` |
+
+重新评估结果：
+
+| 模型 / 口径 | Point format | Point Hit@50 | Point Hit@100 | MinDist | 说明 |
+|---|---:|---:|---:|---:|---|
+| 8B base，原 prompt strict | 0.0000 | 0.0000 | 0.0000 | - | 不按 `<point>` 协议输出 |
+| 8B base，原 prompt lenient | - | 0.4450 | 0.5950 | 89.1 | 接受裸 `[(x,y)]` 后的估计 |
+| 8B instruct，原 prompt strict | 0.0000 | 0.0000 | 0.0000 | - | 不按 `<point>` 协议输出 |
+| 8B instruct，原 prompt lenient | - | 0.3686 | 0.5536 | 99.5 | 接受裸 `[(x,y)]` 后的估计 |
+| Qwen-122B，原 prompt strict | 0.0000 | 0.0000 | 0.0000 | - | 协议失败为主 |
+| Qwen-122B，原 prompt lenient | - | 0.4914 | 0.6500 | 69.1 | 有一定定位能力 |
+| Qwen-122B，修正 prompt strict | **0.9986** | **0.6771** | **0.8200** | 69.1 | 协议修正后显著提升 |
+| Qwen3-35B-VL，原 prompt strict | 0.0000 | 0.0057 | 0.0093 | 66.5 | 少数输出可被 parser 读到 |
+| Qwen3-35B-VL，原 prompt lenient | - | 0.4400 | 0.5736 | 71.4 | 有一定定位能力 |
+| Qwen3-35B-VL，修正 prompt strict | 0.9857 | 0.6493 | 0.7871 | 75.9 | 协议修正后显著提升 |
+| OPD5000 ckpt5000，原 prompt strict | **1.0000** | **0.7493** | **0.8729** | **51.7** | 仍是 point 子集最强 |
+
+修正后的结论：
+
+1. **之前大模型 point strict 为 0 主要是 prompt/protocol 问题。** 原 prompt 用 `[(x,y)]` 引导，但 evaluator 要 `<point>...</point>`，这对未专门训练过协议的大模型不公平。
+2. **协议修正后，大模型 point 能力明显成立。** Qwen-122B 达到 `Hit@50=0.6771` / `Hit@100=0.8200`，Qwen3-35B-VL 达到 `0.6493` / `0.7871`。
+3. **OPD5000 8B 仍是 point 最强模型。** 它在不修改 prompt 的原始 strict 口径下就有 `Hit@50=0.7493` / `Hit@100=0.8729`，且最小距离均值更低，说明不仅协议稳定，定位也更贴近 gold point。
+4. **后续评估口径应分两层报告。** 对部署协议能力看 original strict；对大模型几何定位能力看 protocol-fixed strict 或 lenient。大模型可以作为 point/box teacher，但若要公平比较几何能力，必须先把输出协议在 prompt 中写死。
+
+### 不看错误 eval / 格式率的领域能力总表
+
+本表不再纳入错误的 point strict eval，也不展示 format accuracy。box 域只看几何框选能力，使用 IoU 与 Acc@0.5；point 域对 base/instruct 使用 lenient 几何能力估计，对 122B/35B 使用 protocol-fixed strict 结果，对 OPD 使用原始 strict 结果；text 域使用 `text_loose`。
+
+Box 域 IoU：
+
+| 模型 | RefCOCO | Flickr30K | SemanticNav Box | VG Object | VG Region | VG Relation |
+|---|---:|---:|---:|---:|---:|---:|
+| 8B base | 0.6458 | 0.5534 | 0.2117 | 0.2617 | 0.3150 | 0.3134 |
+| 8B instruct | 0.6820 | 0.5908 | 0.1967 | 0.2878 | 0.3413 | 0.3535 |
+| OPD5000 ckpt3000 | 0.7343 | 0.7079 | 0.2921 | 0.3197 | 0.3925 | 0.4019 |
+| OPD5000 ckpt5000 | 0.7358 | **0.7101** | 0.2924 | 0.3211 | 0.3912 | 0.3974 |
+| Qwen-122B | **0.8386** | 0.6874 | **0.4199** | **0.4097** | **0.4339** | **0.4787** |
+| Qwen3-35B-VL | 0.8312 | 0.6753 | 0.4124 | 0.4001 | 0.4270 | 0.4743 |
+
+Box 域 Acc@0.5：
+
+| 模型 | RefCOCO | Flickr30K | SemanticNav Box | VG Object | VG Region | VG Relation |
+|---|---:|---:|---:|---:|---:|---:|
+| 8B base | 0.7455 | 0.6122 | 0.2075 | 0.2564 | 0.3027 | 0.3100 |
+| 8B instruct | 0.8009 | 0.6567 | 0.1138 | 0.2845 | 0.3327 | 0.3636 |
+| OPD5000 ckpt5000 | 0.8345 | **0.7878** | 0.3275 | 0.3427 | 0.4182 | 0.4264 |
+| Qwen-122B | **0.9036** | 0.7367 | **0.4925** | **0.4255** | **0.4445** | 0.5045 |
+| Qwen3-35B-VL | 0.9009 | 0.7067 | 0.4825 | 0.4245 | 0.4427 | **0.5091** |
+
+Point / Text 域能力：
+
+| 模型 | Point Hit@50 | Point Hit@100 | Point MinDist | Keepalive VQA loose |
+|---|---:|---:|---:|---:|
+| 8B base | 0.4450 | 0.5950 | 89.1 | 0.0080 |
+| 8B instruct | 0.3686 | 0.5536 | 99.5 | 0.5200 |
+| OPD5000 ckpt3000 | 0.7414 | 0.8629 | 53.3 | 0.8716 |
+| OPD5000 ckpt5000 | **0.7493** | **0.8729** | **51.7** | **0.8724** |
+| Qwen-122B, protocol-fixed | 0.6771 | 0.8200 | 69.1 | 0.6000 |
+| Qwen3-35B-VL, protocol-fixed | 0.6493 | 0.7871 | 75.9 | 0.4476 |
+
+综合结论：
+
+1. 122B/35B 在大多数 box 域上仍是最强，尤其 RefCOCO、semantic-nav box、VG object/region/relation。
+2. OPD5000 8B 在 Flickr30K box、point、keepalive text 上更强，且是当前统一多任务协议下最稳的可部署 8B 模型。
+3. 8B instruct 相对 8B base 有提升，但没有解决 point 与整体任务保持问题；OPD 带来的提升远大于 instruct/base 差异。

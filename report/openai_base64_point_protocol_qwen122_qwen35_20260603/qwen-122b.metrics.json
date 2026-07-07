@@ -1,0 +1,125 @@
+{
+  "model": "qwen-122b",
+  "model_path": "http://127.0.0.1:13001/v1#qwen-122b",
+  "eval_path": "/data/msz/point/eval_raw_holdout_v1/raw_holdout_eval_v1_10k.jsonl",
+  "rows": 1400,
+  "batch_size": null,
+  "workers": 4,
+  "max_new_tokens": 64,
+  "api_errors": 0,
+  "enable_thinking": false,
+  "expected_format_filter": "point",
+  "enforce_point_protocol": true,
+  "seconds": 1022.793,
+  "overall": {
+    "n": 1400,
+    "coord_valid": 0.9985714285714286,
+    "format_pass": 0.9985714285714286,
+    "hit_at_100": 0.82,
+    "hit_at_50": 0.6771428571428572,
+    "gold_point_count_mean": 8.657857142857143,
+    "mean_gold_to_pred_dist_mean": 135.88283281570534,
+    "mean_pred_to_gold_dist_mean": 89.26722499586842,
+    "min_point_dist_mean": 69.07602037061451,
+    "point_count_abs_diff_mean": 6.699285714285714,
+    "pred_point_count_mean": 2.1714285714285713
+  },
+  "by_pool": {
+    "grounding_point": {
+      "n": 1400,
+      "coord_valid": 0.9985714285714286,
+      "format_pass": 0.9985714285714286,
+      "hit_at_100": 0.82,
+      "hit_at_50": 0.6771428571428572,
+      "gold_point_count_mean": 8.657857142857143,
+      "mean_gold_to_pred_dist_mean": 135.88283281570534,
+      "mean_pred_to_gold_dist_mean": 89.26722499586842,
+      "min_point_dist_mean": 69.07602037061451,
+      "point_count_abs_diff_mean": 6.699285714285714,
+      "pred_point_count_mean": 2.1714285714285713
+    }
+  },
+  "by_format": {
+    "point": {
+      "n": 1400,
+      "coord_valid": 0.9985714285714286,
+      "format_pass": 0.9985714285714286,
+      "hit_at_100": 0.82,
+      "hit_at_50": 0.6771428571428572,
+      "gold_point_count_mean": 8.657857142857143,
+      "mean_gold_to_pred_dist_mean": 135.88283281570534,
+      "mean_pred_to_gold_dist_mean": 89.26722499586842,
+      "min_point_dist_mean": 69.07602037061451,
+      "point_count_abs_diff_mean": 6.699285714285714,
+      "pred_point_count_mean": 2.1714285714285713
+    }
+  },
+  "by_group": {
+    "grounding_point/VG_100K": {
+      "n": 32,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.34375,
+      "hit_at_50": 0.09375,
+      "gold_point_count_mean": 2.0,
+      "mean_gold_to_pred_dist_mean": 350.68289258695313,
+      "mean_pred_to_gold_dist_mean": 302.9269342162114,
+      "min_point_dist_mean": 278.6007131408504,
+      "point_count_abs_diff_mean": 1.21875,
+      "pred_point_count_mean": 1.65625
+    },
+    "grounding_point/coco": {
+      "n": 206,
+      "coord_valid": 0.9951456310679612,
+      "format_pass": 0.9951456310679612,
+      "hit_at_100": 0.6553398058252428,
+      "hit_at_50": 0.5825242718446602,
+      "gold_point_count_mean": 4.5,
+      "mean_gold_to_pred_dist_mean": 372.22697597217206,
+      "mean_pred_to_gold_dist_mean": 171.64351067377476,
+      "min_point_dist_mean": 148.09151014827816,
+      "point_count_abs_diff_mean": 2.936893203883495,
+      "pred_point_count_mean": 1.9320388349514563
+    },
+    "grounding_point/object_ref": {
+      "n": 628,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.8614649681528662,
+      "hit_at_50": 0.7595541401273885,
+      "gold_point_count_mean": 10.992038216560509,
+      "mean_gold_to_pred_dist_mean": 97.70198646202869,
+      "mean_pred_to_gold_dist_mean": 65.42893386703507,
+      "min_point_dist_mean": 48.629351729132864,
+      "point_count_abs_diff_mean": 8.912420382165605,
+      "pred_point_count_mean": 2.082802547770701
+    },
+    "grounding_point/region_ref": {
+      "n": 532,
+      "coord_valid": 0.9981203007518797,
+      "format_pass": 0.9981203007518797,
+      "hit_at_100": 0.8665413533834586,
+      "hit_at_50": 0.6541353383458647,
+      "gold_point_count_mean": 7.94172932330827,
+      "mean_gold_to_pred_dist_mean": 75.62146456593348,
+      "mean_pred_to_gold_dist_mean": 71.13523304785483,
+      "min_point_dist_mean": 48.571246967719304,
+      "point_count_abs_diff_mean": 5.896616541353383,
+      "pred_point_count_mean": 2.4022556390977443
+    },
+    "grounding_point/text_vqa": {
+      "n": 2,
+      "coord_valid": 1.0,
+      "format_pass": 1.0,
+      "hit_at_100": 0.0,
+      "hit_at_50": 0.0,
+      "gold_point_count_mean": 1.0,
+      "mean_gold_to_pred_dist_mean": 492.1169124316727,
+      "mean_pred_to_gold_dist_mean": 535.4758681102323,
+      "min_point_dist_mean": 492.1169124316727,
+      "point_count_abs_diff_mean": 0.5,
+      "pred_point_count_mean": 1.5
+    }
+  },
+  "prediction_file": "/data/msz/point/eval_raw_holdout_v1/openai_base64_point_protocol_qwen122_qwen35_20260603_221231/qwen-122b/predictions.jsonl"
+}

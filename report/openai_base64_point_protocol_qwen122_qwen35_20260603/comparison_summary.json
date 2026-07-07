@@ -1,0 +1,73 @@
+{
+  "run_dir": "/data/msz/point/eval_raw_holdout_v1/openai_base64_point_protocol_qwen122_qwen35_20260603_221231",
+  "models": [
+    {
+      "model": "qwen-122b",
+      "rows": 1400,
+      "seconds": 1022.793,
+      "samples_per_sec": 1.3688009206163907,
+      "format_pass": 0.9985714285714286,
+      "coord_valid": 0.9985714285714286,
+      "hit_at_50": 0.6771428571428572,
+      "hit_at_100": 0.82,
+      "min_point_dist_mean": 69.07602037061451,
+      "mean_pred_to_gold_dist_mean": 89.26722499586842
+    },
+    {
+      "model": "qwen3-35b-vl",
+      "rows": 1400,
+      "seconds": 1006.901,
+      "samples_per_sec": 1.390404816362284,
+      "format_pass": 0.9857142857142858,
+      "coord_valid": 0.9857142857142858,
+      "hit_at_50": 0.6492857142857142,
+      "hit_at_100": 0.7871428571428571,
+      "min_point_dist_mean": 75.86916849703513,
+      "mean_pred_to_gold_dist_mean": 94.08920185364288
+    }
+  ],
+  "by_pool": {
+    "grounding_point": {
+      "qwen-122b": {
+        "n": 1400,
+        "format_pass": 0.9985714285714286,
+        "coord_valid": 0.9985714285714286,
+        "hit_at_50": 0.6771428571428572,
+        "hit_at_100": 0.82,
+        "min_point_dist_mean": 69.07602037061451,
+        "mean_pred_to_gold_dist_mean": 89.26722499586842
+      },
+      "qwen3-35b-vl": {
+        "n": 1400,
+        "format_pass": 0.9857142857142858,
+        "coord_valid": 0.9857142857142858,
+        "hit_at_50": 0.6492857142857142,
+        "hit_at_100": 0.7871428571428571,
+        "min_point_dist_mean": 75.86916849703513,
+        "mean_pred_to_gold_dist_mean": 94.08920185364288
+      }
+    }
+  },
+  "by_format": {
+    "point": {
+      "qwen-122b": {
+        "n": 1400,
+        "format_pass": 0.9985714285714286,
+        "coord_valid": 0.9985714285714286,
+        "hit_at_50": 0.6771428571428572,
+        "hit_at_100": 0.82,
+        "min_point_dist_mean": 69.07602037061451,
+        "mean_pred_to_gold_dist_mean": 89.26722499586842
+      },
+      "qwen3-35b-vl": {
+        "n": 1400,
+        "format_pass": 0.9857142857142858,
+        "coord_valid": 0.9857142857142858,
+        "hit_at_50": 0.6492857142857142,
+        "hit_at_100": 0.7871428571428571,
+        "min_point_dist_mean": 75.86916849703513,
+        "mean_pred_to_gold_dist_mean": 94.08920185364288
+      }
+    }
+  }
+}
